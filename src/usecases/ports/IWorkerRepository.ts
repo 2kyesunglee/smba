@@ -1,0 +1,10 @@
+import { Worker } from '@/domain/entities/Worker';
+
+export interface IWorkerRepository {
+  findById(id: string): Promise<Worker | null>;
+  findByPhoneNumber(phoneNumber: string): Promise<Worker | null>;
+  findAll(): Promise<Worker[]>;
+  save(worker: Worker): Promise<void>;
+  update(worker: Worker): Promise<void>;
+  delete(id: string): Promise<void>;
+}
