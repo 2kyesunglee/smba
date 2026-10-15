@@ -48,9 +48,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
           title="외국인 근로자 전용 모바일 앱 화면 체험"
         >
           <Smartphone className="w-4 h-4" />
-          <span>근로자 모바일 앱 뷰</span>
+          <span>시뮬레이터 팝업</span>
           <span className="bg-black/30 text-[10px] px-1.5 py-0.5 rounded-full font-mono">16개국어</span>
         </button>
+
+        {/* Direct Mobile Page Link */}
+        <a
+          href="/mobile"
+          target="_blank"
+          rel="noreferrer"
+          className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 border border-blue-400/30 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors"
+          title="근로자 모바일 전용 페이지 새창 열기"
+        >
+          <span>📱 모바일 전용창 (/mobile)</span>
+        </a>
 
         {/* Notifications Popover */}
         <div className="relative">
