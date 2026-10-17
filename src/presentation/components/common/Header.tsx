@@ -27,8 +27,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
 
-  // Server Host (default to detected LAN IPv4)
-  const [serverHost, setServerHost] = useState('192.168.0.99');
+  // Target Server Base URL (defaults to Vercel production server)
+  const [baseUrl, setBaseUrl] = useState('https://smba-one.vercel.app');
   const [installTab, setInstallTab] = useState<'apk' | 'web'>('apk');
 
   // QR Code Data URLs
@@ -37,8 +37,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const apkUrl = `http://${serverHost}:3000/downloads/safeguard-ai-mobile.apk`;
-  const webUrl = `http://${serverHost}:3000/mobile`;
+  const apkUrl = `${baseUrl.replace(/\/$/, '')}/downloads/safeguard-ai-mobile.apk`;
+  const webUrl = `${baseUrl.replace(/\/$/, '')}/mobile`;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.origin.includes('vercel.app')) {
+        setBaseUrl(window.location.origin);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     QRCode.toDataURL(apkUrl, { width: 220, margin: 1, color: { dark: '#0F172A', light: '#FFFFFF' } })
@@ -48,7 +56,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
     QRCode.toDataURL(webUrl, { width: 220, margin: 1, color: { dark: '#0F172A', light: '#FFFFFF' } })
       .then((url) => setWebQrData(url))
       .catch((err) => console.error(err));
-  }, [serverHost, apkUrl, webUrl]);
+  }, [baseUrl, apkUrl, webUrl]);
 
   return (
     <header className="h-[70px] bg-white/95 backdrop-blur-md border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm">
@@ -187,22 +195,46 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
               </button>
             </div>
 
-            {/* Network IP Configuration Bar */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-700">
-                <Wifi className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>
-                  현재 PC Wi-Fi IP: <strong className="font-mono text-slate-900">{serverHost}</strong> (스마트폰과 동일한 공유기 연결)
+            {/* Server Connection Bar */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-2 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <Wifi className="w-4 h-4 text-emerald-600" />
+                  연동 대상 서버:
                 </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setBaseUrl('https://smba-one.vercel.app')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                      baseUrl.includes('vercel.app')
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    🌐 Vercel 운영 서버 (기본)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBaseUrl('http://192.168.0.99:3000')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                      baseUrl.includes('192.168.0.99')
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    💻 로컬 PC Wi-Fi
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 text-[11px]">IP 변경:</span>
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-200/50">
+                <span className="text-slate-500 text-[11px] shrink-0">접속 주소:</span>
                 <input
                   type="text"
-                  value={serverHost}
-                  onChange={(e) => setServerHost(e.target.value)}
-                  className="bg-white border border-slate-200 rounded px-2 py-1 font-mono text-xs w-32 text-slate-800"
-                  placeholder="예: 192.168.0.99"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  className="bg-white border border-slate-200 rounded px-2.5 py-1 font-mono text-xs text-slate-800 w-full font-semibold"
+                  placeholder="https://smba-one.vercel.app"
                 />
               </div>
             </div>
@@ -289,10 +321,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
                       <span className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px]">
                         3
                       </span>
-                      실시간 연동 테스트
+                      실시간 연동 테스트 (Vercel 자동 연동)
                     </h4>
-                    <p className="text-blue-800 text-[11px]">
-                      설치된 <strong>SafeGuard AI</strong> 앱을 실행하면 현장 근로자 전용 모바일 화면이 뜨며, SOS나 전자서명 제출 시 PC 대시보드에 즉시 반영됩니다!
+                    <p className="text-blue-800 text-[11px] leading-relaxed">
+                      설치된 <strong>SafeGuard AI</strong> 앱을 실행하면 <strong>Vercel 운영 서버(https://smba-one.vercel.app/mobile)</strong>에 자동 접속되어, Wi-Fi뿐만 아니라 스마트폰 LTE/5G 데이터 환경에서도 24시간 실시간 연동됩니다!
                     </p>
                   </div>
                 </div>
@@ -337,8 +369,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
                       - <strong>iPhone</strong>: 사파리 하단 공유(↑) -&gt; [홈 화면에 추가]
                     </p>
                   </div>
-                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px]">
-                    ※ 스마트폰과 PC가 반드시 같은 Wi-Fi 공유기(네트워크)에 연결되어 있어야 로컬 IP({serverHost})로 접속 가능합니다.
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] leading-relaxed">
+                    ※ Vercel 운영 서버(https://smba-one.vercel.app)는 LTE/5G 어디서나 즉시 접속 가능하며, 로컬 IP 주소로 테스트할 경우 스마트폰과 PC가 같은 Wi-Fi에 연결되어 있어야 합니다.
                   </div>
                 </div>
               </div>

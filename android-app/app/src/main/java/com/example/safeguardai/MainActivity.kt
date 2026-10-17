@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
-    private val defaultServerUrl = "http://192.168.0.99:3000/mobile"
+    private val defaultServerUrl = "https://smba-one.vercel.app/mobile"
     private val prefKey = "safeguard_server_url"
 
     private val fileChooserLauncher =
@@ -158,9 +158,9 @@ class MainActivity : ComponentActivity() {
                     progressBar.visibility = View.GONE
                     errorLayout.visibility = View.VISIBLE
                     val currentUrl = getServerUrl()
-                    errorText.text = "관리자 서버에 연결할 수 없습니다.\n($currentUrl)\n\n" +
-                            "1. PC와 스마트폰이 동일한 Wi-Fi 공유기에 연결되어 있는지 확인해주세요.\n" +
-                            "2. PC 터미널에서 'npm run dev' 서버가 실행 중인지 확인해주세요."
+                    errorText.text = "서버에 연결할 수 없습니다.\n($currentUrl)\n\n" +
+                            "스마트폰의 인터넷(와이파이 또는 모바일 데이터) 연결 상태를 확인해주세요.\n" +
+                            "우측 상단 [IP설정] 버튼으로 접속 주소를 언제든 변경하실 수 있습니다."
                 }
             }
         }
@@ -289,26 +289,26 @@ class MainActivity : ComponentActivity() {
         val input = EditText(this).apply {
             setText(currentUrl)
             setSelection(currentUrl.length)
-            hint = "예: http://192.168.0.99:3000/mobile"
+            hint = "예: https://smba-one.vercel.app/mobile"
         }
 
         AlertDialog.Builder(this)
             .setTitle("SafeGuard AI 서버 주소 설정")
-            .setMessage("연결할 PC의 IP 주소와 포트를 입력하세요.")
+            .setMessage("연결할 웹 서버의 URL을 입력하세요.")
             .setView(input)
             .setPositiveButton("저장 및 접속") { _, _ ->
                 var newUrl = input.text.toString().trim()
                 if (!newUrl.startsWith("http://") && !newUrl.startsWith("https://")) {
-                    newUrl = "http://$newUrl"
+                    newUrl = "https://$newUrl"
                 }
                 saveServerUrl(newUrl)
                 webView.loadUrl(newUrl)
                 Toast.makeText(this, "서버 주소가 변경되었습니다: $newUrl", Toast.LENGTH_SHORT).show()
             }
-            .setNeutralButton("기본값 복원") { _, _ ->
+            .setNeutralButton("Vercel 기본주소로 복원") { _, _ ->
                 saveServerUrl(defaultServerUrl)
                 webView.loadUrl(defaultServerUrl)
-                Toast.makeText(this, "기본 주소로 복원되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Vercel 주소($defaultServerUrl)로 복원되었습니다.", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("취소", null)
             .show()
