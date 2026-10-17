@@ -1,8 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { LocalStateStore, StoreState } from '@/infrastructure/storage/LocalStateStore';
-import { Worker } from '@/domain/entities/Worker';
+import { LocalStateStore, StoreState, SafetyMaterial, MaterialSignature, PushHistoryItem } from '@/infrastructure/storage/LocalStateStore';
+import { Worker, WorkerProps } from '@/domain/entities/Worker';
 import { PTWRequest } from '@/domain/entities/PTWRequest';
 import { Inspection } from '@/domain/entities/Inspection';
 import { EquipmentQR } from '@/domain/entities/EquipmentQR';
@@ -18,7 +18,9 @@ interface AppContextType extends StoreState {
   abnormalInspectionCount: number;
   expiringVisaCount: number;
   approveWorker: (id: string) => void;
-  addWorker: (workerData: Partial<Worker>) => void;
+  addWorker: (workerData: Partial<WorkerProps>) => void;
+  updateWorker: (id: string, workerData: Partial<WorkerProps>) => void;
+  deleteWorker: (id: string) => void;
   approvePTW: (id: string) => void;
   rejectPTW: (id: string, reason: string) => void;
   createPTW: (data: { taskName: string; location: string; hazardFactors: string; safetyMeasures: string }) => void;
@@ -26,9 +28,15 @@ interface AppContextType extends StoreState {
   resolveSOS: (id: string) => void;
   submitInspection: (equipmentId: string, equipmentName: string, data: Record<string, any>, isAbnormal?: boolean, abnormalNotes?: string) => void;
   submitSignature: (refType: 'TBM' | 'SAFETY_EDUCATION' | 'PTW', refId: string, refTitle: string, dataUrl: string) => void;
-  submitWorkReport: (taskName: string, location: string, beforeImg: string, afterImg: string, description: string) => void;
+  submitWorkReport: (taskName: string, location: string, beforeImg: string, afterImg: string, description: string, beforeImgs?: string[], afterImgs?: string[]) => void;
   createEquipmentQR: (eq: Partial<EquipmentQR>) => void;
   createTemplate: (tpl: Partial<Template>) => void;
+  addSafetyMaterial: (material: SafetyMaterial) => void;
+  deleteSafetyMaterial: (id: string) => void;
+  signSafetyMaterial: (materialId: string, signature: MaterialSignature) => void;
+  addPushHistory: (item: PushHistoryItem) => void;
+  updatePushHistory: (id: string, updated: Partial<PushHistoryItem>) => void;
+  deletePushHistory: (id: string) => void;
   switchRole: (role: 'admin' | 'worker') => void;
   setActiveWorker: (workerId: string) => void;
   switchLanguage: (lang: string) => void;
@@ -60,7 +68,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentWorker = state.workers.find((w) => w.id === state.activeWorkerId) || state.workers[0];
 
   const approveWorker = (id: string) => store.approveWorker(id);
-  const addWorker = (data: Partial<Worker>) => {
+  const addWorker = (data: Partial<WorkerProps>) => {
     const newWorker = Worker.create({
       id: 'w-' + Date.now(),
       name: data.name || 'New Worker',
@@ -69,6 +77,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       phoneNumber: data.phoneNumber || '010-0000-0000',
       nationality: data.nationality || 'VN',
       visaType: data.visaType || 'E-9',
+      gender: data.gender || 'M',
+      bloodType: data.bloodType || 'A',
+      reEntryAllowed: data.reEntryAllowed ?? false,
       contractStartDate: data.contractStartDate || '2026-10-15',
       contractEndDate: data.contractEndDate || '2027-12-31',
       departureDate: data.departureDate,
@@ -76,6 +87,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     store.addWorker(newWorker);
   };
+  const updateWorker = (id: string, data: Partial<WorkerProps>) => store.updateWorker(id, data);
+  const deleteWorker = (id: string) => store.deleteWorker(id);
 
   const approvePTW = (id: string) => store.approvePTW(id);
   const rejectPTW = (id: string, reason: string) => store.rejectPTW(id, reason);
@@ -128,7 +141,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     store.addSignature(sig);
   };
 
-  const submitWorkReport = (taskName: string, location: string, beforeImg: string, afterImg: string, description: string) => {
+  const submitWorkReport = (
+    taskName: string,
+    location: string,
+    beforeImg: string,
+    afterImg: string,
+    description: string,
+    beforeImgs?: string[],
+    afterImgs?: string[]
+  ) => {
     const report = new WorkReport({
       id: 'rep-' + Date.now(),
       workerId: currentWorker.id,
@@ -137,6 +158,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       location,
       beforeImg,
       afterImg,
+      beforeImgs: beforeImgs || (beforeImg ? [beforeImg] : []),
+      afterImgs: afterImgs || (afterImg ? [afterImg] : []),
       description,
     });
     store.addWorkReport(report);
@@ -170,6 +193,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     store.addTemplate(item);
   };
 
+  const addSafetyMaterial = (material: SafetyMaterial) => store.addSafetyMaterial(material);
+  const deleteSafetyMaterial = (id: string) => store.deleteSafetyMaterial(id);
+  const signSafetyMaterial = (materialId: string, signature: MaterialSignature) =>
+    store.signSafetyMaterial(materialId, signature);
+
+  const addPushHistory = (item: PushHistoryItem) => store.addPushHistory(item);
+  const updatePushHistory = (id: string, updated: Partial<PushHistoryItem>) =>
+    store.updatePushHistory(id, updated);
+  const deletePushHistory = (id: string) => store.deletePushHistory(id);
+
   const switchRole = (role: 'admin' | 'worker') => store.setRole(role);
   const setActiveWorker = (id: string) => store.setActiveWorker(id);
   const switchLanguage = (lang: string) => store.setLanguage(lang);
@@ -186,6 +219,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         expiringVisaCount,
         approveWorker,
         addWorker,
+        updateWorker,
+        deleteWorker,
         approvePTW,
         rejectPTW,
         createPTW,
@@ -196,6 +231,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         submitWorkReport,
         createEquipmentQR,
         createTemplate,
+        addSafetyMaterial,
+        deleteSafetyMaterial,
+        signSafetyMaterial,
+        addPushHistory,
+        updatePushHistory,
+        deletePushHistory,
         switchRole,
         setActiveWorker,
         switchLanguage,
@@ -205,6 +246,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     </AppContext.Provider>
   );
 };
+
+
 
 export const useAppStore = () => {
   const context = useContext(AppContext);

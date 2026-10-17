@@ -27,6 +27,39 @@ export interface AppNotification {
   priority: 'CRITICAL' | 'HIGH' | 'NORMAL';
 }
 
+export interface MaterialSignature {
+  id: string;
+  workerId: string;
+  workerName: string;
+  nationality: string;
+  signedAt: string;
+  signatureDataUrl?: string;
+}
+
+export interface SafetyMaterial {
+  id: string;
+  type: 'SAFETY_EDUCATION' | 'TBM';
+  title: string;
+  category: string;
+  fileName: string;
+  fileSize: string;
+  pdfUrl?: string;
+  description: string;
+  targetDepartment: string;
+  uploadedAt: string;
+  uploadedBy: string;
+  signatures: MaterialSignature[];
+}
+
+export interface PushHistoryItem {
+  id: string;
+  sentAt: string;
+  target: string;
+  targetWorkerId?: string;
+  instructionText: string;
+  status: 'SENT' | 'DELIVERED';
+}
+
 export interface StoreState {
   workers: Worker[];
   equipmentList: EquipmentQR[];
@@ -38,12 +71,31 @@ export interface StoreState {
   signatures: Signature[];
   documents: DocumentItem[];
   notifications: AppNotification[];
+  safetyMaterials: SafetyMaterial[];
+  pushHistories: PushHistoryItem[];
   currentRole: 'admin' | 'worker';
   activeWorkerId: string;
   currentLanguage: string;
 }
 
+
 const INITIAL_WORKERS: Worker[] = [
+  Worker.create({
+    id: 'w-kr-1',
+    name: '김한국',
+    koreanName: '김한국',
+    alienRegNumber: '950512-1092837',
+    phoneNumber: '010-8888-9999',
+    nationality: 'KR',
+    visaType: '내국인',
+    gender: 'M',
+    status: 'ACTIVE',
+    bloodType: 'O',
+    reEntryAllowed: true,
+    contractStartDate: '2023-01-01',
+    contractEndDate: '2029-12-31',
+    specialHealthCheckDate: '2026-11-10',
+  }),
   Worker.create({
     id: 'w-1',
     name: 'Nguyen Van An',
@@ -54,10 +106,11 @@ const INITIAL_WORKERS: Worker[] = [
     visaType: 'E-9',
     gender: 'M',
     status: 'ACTIVE',
+    bloodType: 'A',
+    reEntryAllowed: true,
     contractStartDate: '2023-11-01',
     contractEndDate: '2026-11-20', // 약 36일 남음 (D-36)
     departureDate: '2026-11-30',
-    reEntryAllowed: true,
     specialHealthCheckDate: '2026-10-30', // 15일 남음
   }),
   Worker.create({
@@ -70,10 +123,11 @@ const INITIAL_WORKERS: Worker[] = [
     visaType: 'E-9',
     gender: 'M',
     status: 'ACTIVE',
+    bloodType: 'B',
+    reEntryAllowed: false,
     contractStartDate: '2024-02-01',
     contractEndDate: '2026-12-05', // 약 51일 남음 (D-51)
     departureDate: '2026-12-20',
-    reEntryAllowed: false,
     specialHealthCheckDate: '2026-11-15',
   }),
   Worker.create({
@@ -86,6 +140,8 @@ const INITIAL_WORKERS: Worker[] = [
     visaType: 'E-9',
     gender: 'M',
     status: 'PENDING_APPROVAL', // 앱 승인 대기
+    bloodType: 'O',
+    reEntryAllowed: true,
     contractStartDate: '2024-09-01',
     contractEndDate: '2027-08-31',
   }),
@@ -99,6 +155,8 @@ const INITIAL_WORKERS: Worker[] = [
     visaType: 'E-7',
     gender: 'M',
     status: 'ACTIVE',
+    bloodType: 'AB',
+    reEntryAllowed: true,
     contractStartDate: '2023-05-10',
     contractEndDate: '2027-05-09',
     specialHealthCheckDate: '2026-12-01',
@@ -113,6 +171,8 @@ const INITIAL_WORKERS: Worker[] = [
     visaType: 'E-9',
     gender: 'M',
     status: 'ACTIVE',
+    bloodType: 'A',
+    reEntryAllowed: false,
     contractStartDate: '2024-01-15',
     contractEndDate: '2027-01-14',
     specialHealthCheckDate: '2026-10-25',
@@ -127,10 +187,13 @@ const INITIAL_WORKERS: Worker[] = [
     visaType: 'E-9',
     gender: 'M',
     status: 'PENDING_APPROVAL', // 앱 승인 대기
+    bloodType: 'B',
+    reEntryAllowed: false,
     contractStartDate: '2024-08-10',
     contractEndDate: '2027-08-09',
   }),
 ];
+
 
 const INITIAL_EQUIPMENT: EquipmentQR[] = [
   {
@@ -308,6 +371,14 @@ const INITIAL_WORK_REPORTS: WorkReport[] = [
     location: 'A동 2층 배관라인',
     beforeImg: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
     afterImg: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
+    beforeImgs: [
+      'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80',
+    ],
+    afterImgs: [
+      'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
+    ],
     description: '노후된 가스켓 탈거 후 고내열 테플론 패킹으로 신규 체결 및 누설 테스트 완료함.',
     reportedAt: '2026-10-15T11:20:00Z',
   }),
@@ -319,9 +390,135 @@ const INITIAL_WORK_REPORTS: WorkReport[] = [
     location: 'C동 펌프실',
     beforeImg: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=600&q=80',
     afterImg: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
+    beforeImgs: [
+      'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
+    ],
+    afterImgs: [
+      'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?auto=format&fit=crop&w=600&q=80',
+    ],
     description: '흡입관 막힘 이물질 3.5kg 수거 완료 및 임펠러 부식 방지 코팅 작업 완료.',
     reportedAt: '2026-10-14T16:45:00Z',
   }),
+];
+
+const INITIAL_MATERIALS: SafetyMaterial[] = [
+  {
+    id: 'mat-edu-1',
+    type: 'SAFETY_EDUCATION',
+    title: '2026년 하반기 유해화학물질 취급 안전 및 밀폐공간 특별교육 교안',
+    category: '화학/밀폐 특별안전교육',
+    fileName: '2026_하반기_유해화학물질_취급_특별교육.pdf',
+    fileSize: '4.5 MB',
+    description: '산업안전보건법 제29조에 의거한 근로자 정기 및 특별안전보건교육 교안 (MSDS 및 보호구 착용법 포함)',
+    targetDepartment: 'A동 화학정제라인 / 보일러실',
+    uploadedAt: '2026-10-10',
+    uploadedBy: '김공장장 (안전총괄)',
+    signatures: [
+      {
+        id: 'ms-1',
+        workerId: 'w-1',
+        workerName: 'Nguyen Van An',
+        nationality: 'VN',
+        signedAt: '2026-10-10 14:20',
+      },
+      {
+        id: 'ms-2',
+        workerId: 'w-2',
+        workerName: 'Batbayar Bold',
+        nationality: 'MN',
+        signedAt: '2026-10-10 15:05',
+      },
+    ],
+  },
+  {
+    id: 'mat-edu-2',
+    type: 'SAFETY_EDUCATION',
+    title: '중대재해 예방: 회전체 협착 및 LOTO 잠금장치 취급 표준교안',
+    category: '기계/끼임 예방교육',
+    fileName: '회전체_협착방지_LOTO절차_교안.pdf',
+    fileSize: '3.2 MB',
+    description: '롤러, 분쇄기, 컨베이어 가동 중 접근 금지 및 비상정지 스위치 위치 숙지 교육',
+    targetDepartment: 'C동 환경정화동 및 전 생산라인',
+    uploadedAt: '2026-10-12',
+    uploadedBy: '김공장장 (안전총괄)',
+    signatures: [
+      {
+        id: 'ms-3',
+        workerId: 'w-2',
+        workerName: 'Batbayar Bold',
+        nationality: 'MN',
+        signedAt: '2026-10-14 08:15',
+      },
+    ],
+  },
+  {
+    id: 'mat-tbm-1',
+    type: 'TBM',
+    title: 'A동 스크러버 배관 고소 용접 및 플랜지 작업전 TBM 안전교안',
+    category: '화기/고소 위험공정',
+    fileName: 'A동_스크러버배관_화기_TBM교안.pdf',
+    fileSize: '2.1 MB',
+    description: '화재 감시자 1인 배치, 안전대 2개소 체결 및 가스 누출 사전측정 필수 TBM 절차',
+    targetDepartment: '가공1팀 (용접 및 정비)',
+    uploadedAt: '2026-10-15',
+    uploadedBy: '김공장장 (안전총괄)',
+    signatures: [
+      {
+        id: 'ms-4',
+        workerId: 'w-1',
+        workerName: 'Nguyen Van An',
+        nationality: 'VN',
+        signedAt: '2026-10-15 08:35',
+      },
+    ],
+  },
+  {
+    id: 'mat-tbm-2',
+    type: 'TBM',
+    title: 'C동 슬러지 탈수 압착기 일일 정비 전 전원차단(LOTO) TBM 교안',
+    category: '설비점검/LOTO',
+    fileName: 'C동_슬러지탈수기_LOTO_TBM교안.pdf',
+    fileSize: '1.8 MB',
+    description: '압착 롤러 인터록 점검 및 메인 전원 시건 절차 TBM 확인',
+    targetDepartment: '폐수처리장 운영반',
+    uploadedAt: '2026-10-14',
+    uploadedBy: '김공장장 (안전총괄)',
+    signatures: [
+      {
+        id: 'ms-5',
+        workerId: 'w-2',
+        workerName: 'Batbayar Bold',
+        nationality: 'MN',
+        signedAt: '2026-10-14 08:05',
+      },
+    ],
+  },
+];
+
+const INITIAL_PUSH_HISTORIES: PushHistoryItem[] = [
+  {
+    id: 'push-1',
+    sentAt: '2026-10-15 08:30:15',
+    target: '전체 현장 근로자 (16개국 25명 동시 발송)',
+    instructionText: '오늘 스크러버 배관 용접 작업 주의, 화재 감시자 1인 상주 필수',
+    status: 'DELIVERED',
+  },
+  {
+    id: 'push-2',
+    sentAt: '2026-10-14 13:00:22',
+    target: 'B동 보일러 및 화학물질 취급자',
+    instructionText: '보일러 청관제 투입 시 내화학 장갑 및 안면보호구 착용 필수 확인',
+    status: 'DELIVERED',
+  },
+  {
+    id: 'push-3',
+    sentAt: '2026-10-13 09:10:00',
+    target: 'C동 환경정화동 근무자',
+    instructionText: '슬러지 압착기 가동 전 LOTO 시건 해제 확인 및 안전 인터록 점검',
+    status: 'DELIVERED',
+  },
 ];
 
 const INITIAL_DOCUMENTS: DocumentItem[] = [
@@ -370,6 +567,8 @@ export class LocalStateStore {
       workReports: INITIAL_WORK_REPORTS,
       signatures: [],
       documents: INITIAL_DOCUMENTS,
+      safetyMaterials: INITIAL_MATERIALS,
+      pushHistories: INITIAL_PUSH_HISTORIES,
       notifications: [
         {
           id: 'notif-1',
@@ -395,6 +594,7 @@ export class LocalStateStore {
       currentLanguage: 'ko',
     };
   }
+
 
   public static getInstance(): LocalStateStore {
     if (!LocalStateStore.instance) {
@@ -430,6 +630,22 @@ export class LocalStateStore {
     this.state.workers = [worker, ...this.state.workers];
     this.notify();
   }
+
+  public updateWorker(workerId: string, data: any) {
+    this.state.workers = this.state.workers.map((w) => {
+      if (w.id === workerId) {
+        w.update(data);
+      }
+      return w;
+    });
+    this.notify();
+  }
+
+  public deleteWorker(workerId: string) {
+    this.state.workers = this.state.workers.filter((w) => w.id !== workerId);
+    this.notify();
+  }
+
 
   public approvePTW(ptwId: string, adminId: string = '김공장장 (관리자)') {
     this.state.ptwList = this.state.ptwList.map((p) => {
@@ -545,4 +761,49 @@ export class LocalStateStore {
     this.state.currentLanguage = lang;
     this.notify();
   }
+
+  public addSafetyMaterial(material: SafetyMaterial) {
+    this.state.safetyMaterials = [material, ...this.state.safetyMaterials];
+    this.notify();
+  }
+
+  public deleteSafetyMaterial(id: string) {
+    this.state.safetyMaterials = this.state.safetyMaterials.filter((m) => m.id !== id);
+    this.notify();
+  }
+
+  public signSafetyMaterial(materialId: string, signature: MaterialSignature) {
+    this.state.safetyMaterials = this.state.safetyMaterials.map((m) => {
+      if (m.id === materialId) {
+        const already = m.signatures.some((s) => s.workerId === signature.workerId);
+        const nextSignatures = already
+          ? m.signatures.map((s) => (s.workerId === signature.workerId ? signature : s))
+          : [...m.signatures, signature];
+        return { ...m, signatures: nextSignatures };
+      }
+      return m;
+    });
+    this.notify();
+  }
+
+  public addPushHistory(item: PushHistoryItem) {
+    this.state.pushHistories = [item, ...this.state.pushHistories];
+    this.notify();
+  }
+
+  public updatePushHistory(id: string, updated: Partial<PushHistoryItem>) {
+    this.state.pushHistories = this.state.pushHistories.map((h) => {
+      if (h.id === id) {
+        return { ...h, ...updated };
+      }
+      return h;
+    });
+    this.notify();
+  }
+
+  public deletePushHistory(id: string) {
+    this.state.pushHistories = this.state.pushHistories.filter((h) => h.id !== id);
+    this.notify();
+  }
 }
+

@@ -10,10 +10,11 @@ export interface WorkerProps {
   visaType: string;
   gender?: 'M' | 'F';
   status?: WorkerStatus;
+  bloodType?: 'A' | 'B' | 'AB' | 'O' | string;
+  reEntryAllowed?: boolean;
   contractStartDate: string;
   contractEndDate: string;
   departureDate?: string;
-  reEntryAllowed?: boolean;
   specialHealthCheckDate?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -28,6 +29,7 @@ export class Worker {
   public nationality: string;
   public visaType: string;
   public gender: 'M' | 'F';
+  public bloodType?: 'A' | 'B' | 'AB' | 'O' | string;
   private _status: WorkerStatus;
   public contractStartDate: string;
   public contractEndDate: string;
@@ -46,6 +48,7 @@ export class Worker {
     this.nationality = props.nationality;
     this.visaType = props.visaType;
     this.gender = props.gender || 'M';
+    this.bloodType = props.bloodType;
     this._status = props.status || 'PENDING_APPROVAL';
     this.contractStartDate = props.contractStartDate;
     this.contractEndDate = props.contractEndDate;
@@ -74,6 +77,24 @@ export class Worker {
     this.updatedAt = new Date().toISOString();
   }
 
+  public update(props: Partial<WorkerProps>): void {
+    if (props.name !== undefined) this.name = props.name;
+    if (props.koreanName !== undefined) this.koreanName = props.koreanName;
+    if (props.alienRegNumber !== undefined) this.alienRegNumber = props.alienRegNumber;
+    if (props.phoneNumber !== undefined) this.phoneNumber = props.phoneNumber;
+    if (props.nationality !== undefined) this.nationality = props.nationality;
+    if (props.visaType !== undefined) this.visaType = props.visaType;
+    if (props.gender !== undefined) this.gender = props.gender;
+    if (props.bloodType !== undefined) this.bloodType = props.bloodType;
+    if (props.reEntryAllowed !== undefined) this.reEntryAllowed = props.reEntryAllowed;
+    if (props.status !== undefined) this._status = props.status;
+    if (props.contractStartDate !== undefined) this.contractStartDate = props.contractStartDate;
+    if (props.contractEndDate !== undefined) this.contractEndDate = props.contractEndDate;
+    if (props.departureDate !== undefined) this.departureDate = props.departureDate;
+    if (props.specialHealthCheckDate !== undefined) this.specialHealthCheckDate = props.specialHealthCheckDate;
+    this.updatedAt = new Date().toISOString();
+  }
+
   public getDaysUntilContractEnd(referenceDate?: Date): number {
     const ref = referenceDate || new Date('2026-10-15T00:00:00Z');
     const end = new Date(this.contractEndDate);
@@ -87,3 +108,4 @@ export class Worker {
     return remaining >= 0 && remaining <= 65;
   }
 }
+

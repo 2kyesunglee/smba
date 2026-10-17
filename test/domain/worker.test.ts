@@ -53,4 +53,53 @@ describe('Worker Domain Entity', () => {
     expect(remainingDays).toBe(61);
     expect(worker.isVisaExpiringSoon(remainingDays)).toBe(true); // Within 2 months (60-61 days)
   });
+
+  it('should support bloodType, reEntryAllowed and South Korea nationality', () => {
+    const worker = Worker.create({
+      id: 'w-kr-1',
+      name: '홍길동',
+      koreanName: '홍길동',
+      alienRegNumber: '900101-1234567',
+      phoneNumber: '010-1111-2222',
+      nationality: 'KR',
+      visaType: '내국인',
+      contractStartDate: '2024-01-01',
+      contractEndDate: '2030-12-31',
+      bloodType: 'O',
+      reEntryAllowed: true,
+    });
+
+    expect(worker.nationality).toBe('KR');
+    expect(worker.bloodType).toBe('O');
+    expect(worker.reEntryAllowed).toBe(true);
+  });
+
+  it('should update worker information correctly', () => {
+    const worker = Worker.create({
+      id: 'w-2',
+      name: 'Batbayar',
+      phoneNumber: '010-1111-1111',
+      nationality: 'MN',
+      visaType: 'E-9',
+      contractStartDate: '2024-01-01',
+      contractEndDate: '2026-12-31',
+      bloodType: 'A',
+      reEntryAllowed: false,
+    });
+
+    worker.update({
+      name: 'Batbayar Bold',
+      koreanName: '바트볼드',
+      bloodType: 'B',
+      reEntryAllowed: true,
+      alienRegNumber: '920820-5982134',
+    });
+
+    expect(worker.name).toBe('Batbayar Bold');
+    expect(worker.koreanName).toBe('바트볼드');
+    expect(worker.bloodType).toBe('B');
+    expect(worker.reEntryAllowed).toBe(true);
+    expect(worker.alienRegNumber).toBe('920820-5982134');
+  });
 });
+

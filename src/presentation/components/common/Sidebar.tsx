@@ -39,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
       icon: <Users className="w-5 h-5" />,
       badge: pendingWorkerCount > 0 ? pendingWorkerCount : undefined,
       badgeColor: 'badge-amber',
-      subItems: ['인사기록카드 마스터 DB', '앱 연동 승인 대기열', '비자/검진 캘린더'],
+      subItems: ['근로자 인사기록카드 마스터 DB', '앱 연동 승인 대기열', '비자/검진 캘린더'],
     },
     {
       id: 'safety',
@@ -47,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
       icon: <ShieldAlert className="w-5 h-5" />,
       badge: pendingPTWCount > 0 ? pendingPTWCount : undefined,
       badgeColor: 'badge-blue',
-      subItems: ['16개국어 푸시 지시', 'TBM 교육 교안 & 전자서명', 'PTW 안전작업허가', 'SOS 비상 호출'],
+      subItems: ['안전교육 교안 & 서명', 'TBM & 서명', '16개국어 푸시 지시', 'PTW 안전작업허가', 'SOS 비상 호출'],
     },
     {
       id: 'equipment',
@@ -68,9 +68,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
   ];
 
   return (
-    <aside className="w-64 bg-[#0F172A] border-r border-white/10 flex flex-col justify-between p-4 min-h-[calc(100vh-70px)] select-none">
+    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between p-4 min-h-[calc(100vh-70px)] select-none shadow-sm">
       <div className="space-y-6">
-        <div className="px-3 py-2 text-[11px] font-bold tracking-wider text-gray-400 uppercase">
+        <div className="px-3 py-2 text-[11px] font-bold tracking-wider text-slate-400 uppercase">
           관리자 관제 메뉴 (Admin Menu)
         </div>
 
@@ -83,21 +83,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
                 onClick={() => onSelectTab(item.id)}
                 className={`w-full text-left p-3 rounded-xl transition-all flex flex-col gap-1 ${
                   isActive
-                    ? 'bg-blue-600/20 text-white border border-blue-500/40 shadow-lg shadow-blue-500/10'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5 border border-transparent'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-transparent'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className={isActive ? 'text-blue-400' : 'text-gray-400'}>{item.icon}</span>
-                    <span className="font-semibold text-sm">{item.label}</span>
+                    <span className={isActive ? 'text-blue-600' : 'text-slate-500'}>{item.icon}</span>
+                    <span className="font-bold text-sm">{item.label}</span>
                   </div>
                   {item.badge !== undefined && (
                     <span className={`badge ${item.badgeColor || 'badge-blue'}`}>{item.badge}</span>
                   )}
                 </div>
                 {/* Sub-item preview */}
-                <div className="pl-8 text-[11px] text-gray-500 truncate">
+                <div className="pl-8 text-[11px] text-slate-400 truncate font-medium">
                   {item.subItems.join(' · ')}
                 </div>
               </button>
@@ -107,15 +107,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
       </div>
 
       {/* Compliance / Safety Standard Info Box */}
-      <div className="p-3.5 rounded-xl bg-gradient-to-br from-slate-900 to-indigo-950/60 border border-white/10 text-xs">
-        <div className="flex items-center gap-2 text-indigo-400 font-bold mb-1">
+      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+        <div className="flex items-center gap-2 text-indigo-600 font-bold mb-1">
           <FileCheck2 className="w-4 h-4" />
           <span>중대재해처벌법 100% 대비</span>
         </div>
-        <p className="text-[11px] text-gray-400 leading-relaxed">
+        <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
           전자서명 및 점검 일지가 위·변조 방지 암호화 타임스탬프와 함께 보관됩니다.
         </p>
       </div>
     </aside>
   );
 };
+

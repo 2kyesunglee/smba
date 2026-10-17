@@ -4,8 +4,10 @@ export interface WorkReportProps {
   workerName: string;
   taskName: string;
   location: string;
-  beforeImg: string;
-  afterImg: string;
+  beforeImg?: string;
+  afterImg?: string;
+  beforeImgs?: string[];
+  afterImgs?: string[];
   description: string;
   reportedAt?: string;
 }
@@ -18,6 +20,8 @@ export class WorkReport {
   public readonly location: string;
   public readonly beforeImg: string;
   public readonly afterImg: string;
+  public readonly beforeImgs: string[];
+  public readonly afterImgs: string[];
   public readonly description: string;
   public readonly reportedAt: string;
 
@@ -27,9 +31,12 @@ export class WorkReport {
     this.workerName = props.workerName;
     this.taskName = props.taskName;
     this.location = props.location;
-    this.beforeImg = props.beforeImg;
-    this.afterImg = props.afterImg;
+    this.beforeImg = props.beforeImg || (props.beforeImgs && props.beforeImgs[0]) || '';
+    this.afterImg = props.afterImg || (props.afterImgs && props.afterImgs[0]) || '';
+    this.beforeImgs = props.beforeImgs && props.beforeImgs.length > 0 ? props.beforeImgs : [this.beforeImg].filter(Boolean);
+    this.afterImgs = props.afterImgs && props.afterImgs.length > 0 ? props.afterImgs : [this.afterImg].filter(Boolean);
     this.description = props.description;
     this.reportedAt = props.reportedAt || new Date().toISOString();
   }
 }
+

@@ -16,7 +16,7 @@ export default function Home() {
   const [isMobileSimulatorOpen, setIsMobileSimulatorOpen] = useState(false);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-gray-100">
+    <div className="min-h-screen flex flex-col bg-[#F1F5F9] text-slate-800">
       {/* 1. Top SOS Alert Bar (when emergency triggered) */}
       <SOSAlertBar />
 
@@ -29,7 +29,7 @@ export default function Home() {
         <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
 
         {/* Right Content Area */}
-        <main className="flex-1 p-6 overflow-y-auto max-h-[calc(100vh-70px)] bg-[#0B0F19]">
+        <main className="flex-1 p-6 overflow-y-auto max-h-[calc(100vh-70px)] bg-[#F8FAFC]">
           <div className="max-w-7xl mx-auto space-y-6">
             {activeTab === 'dashboard' && (
               <DashboardView onNavigateTab={(tab) => setActiveTab(tab)} />
@@ -41,6 +41,7 @@ export default function Home() {
           </div>
         </main>
       </div>
+
 
       {/* 4. Worker Smartphone Mobile App Simulator Modal */}
       <WorkerMobileSimulator

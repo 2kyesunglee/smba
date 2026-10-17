@@ -75,12 +75,14 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     steam_leak: '정상',
   });
 
-  // Before/After Form State
+  // Before/After Form State (2 Before + 2 After Photos)
   const [reportForm, setReportForm] = useState({
     taskName: '보일러실 배관 보온재 교체 및 청소',
     location: 'B동 보일러실',
-    beforeImg: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
-    afterImg: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
+    beforeImg1: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
+    beforeImg2: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
+    afterImg1: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
+    afterImg2: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
     description: '노후 보온재 제거 후 난연성 글라스울 재시공 완료함.',
   });
 
@@ -181,11 +183,13 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     submitWorkReport(
       reportForm.taskName,
       reportForm.location,
-      reportForm.beforeImg,
-      reportForm.afterImg,
-      reportForm.description
+      reportForm.beforeImg1,
+      reportForm.afterImg1,
+      reportForm.description,
+      [reportForm.beforeImg1, reportForm.beforeImg2],
+      [reportForm.afterImg1, reportForm.afterImg2]
     );
-    alert('Before & After 작업 완료 보고서가 관리자 갤러리로 전송되었습니다.');
+    alert('Before & After 작업 완료 보고서 (전 2장 + 후 2장)가 관리자 갤러리로 전송되었습니다.');
     setActiveTab('home');
   };
 
@@ -593,22 +597,43 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2 bg-black/40 rounded-lg border border-white/10 text-center">
-                      <div className="text-[10px] text-red-400 font-bold mb-1">BEFORE 사진</div>
-                      <img
-                        src={reportForm.beforeImg}
-                        alt="Before"
-                        className="h-16 w-full object-cover rounded"
-                      />
+                  <div className="space-y-2">
+                    <div className="p-2 bg-red-950/20 rounded-lg border border-red-500/30">
+                      <div className="text-[10px] text-red-400 font-bold mb-1.5 flex items-center justify-between">
+                        <span>BEFORE (작업 전 2장)</span>
+                        <span className="text-[9px] text-gray-400">사진1 & 사진2</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <img
+                          src={reportForm.beforeImg1}
+                          alt="Before 1"
+                          className="h-14 w-full object-cover rounded border border-red-500/40"
+                        />
+                        <img
+                          src={reportForm.beforeImg2}
+                          alt="Before 2"
+                          className="h-14 w-full object-cover rounded border border-red-500/40"
+                        />
+                      </div>
                     </div>
-                    <div className="p-2 bg-black/40 rounded-lg border border-white/10 text-center">
-                      <div className="text-[10px] text-emerald-400 font-bold mb-1">AFTER 사진</div>
-                      <img
-                        src={reportForm.afterImg}
-                        alt="After"
-                        className="h-16 w-full object-cover rounded"
-                      />
+
+                    <div className="p-2 bg-emerald-950/20 rounded-lg border border-emerald-500/30">
+                      <div className="text-[10px] text-emerald-400 font-bold mb-1.5 flex items-center justify-between">
+                        <span>AFTER (작업 후 2장)</span>
+                        <span className="text-[9px] text-gray-400">사진1 & 사진2</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <img
+                          src={reportForm.afterImg1}
+                          alt="After 1"
+                          className="h-14 w-full object-cover rounded border border-emerald-500/40"
+                        />
+                        <img
+                          src={reportForm.afterImg2}
+                          alt="After 2"
+                          className="h-14 w-full object-cover rounded border border-emerald-500/40"
+                        />
+                      </div>
                     </div>
                   </div>
 
