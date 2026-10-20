@@ -21,4 +21,22 @@ describe('WorkReport Domain Entity', () => {
     expect(report.beforeImgs[1]).toBe('https://example.com/before2.jpg');
     expect(report.afterImgs[1]).toBe('https://example.com/after2.jpg');
   });
+
+  it('should support beforeDescription (문제점 설명) and afterDescription (개선이후 설명)', () => {
+    const report = new WorkReport({
+      id: 'rep-2',
+      workerId: 'w-1',
+      workerName: 'Nguyen Van An',
+      taskName: '보일러실 배관 보온재 교체',
+      location: 'B동 보일러실',
+      beforeImg: 'https://example.com/before1.jpg',
+      afterImg: 'https://example.com/after1.jpg',
+      beforeDescription: '노후 보온재 탈락으로 인한 열 손실 및 화상 위험 발생',
+      afterDescription: '난연성 글라스울 재시공 및 알루미늄 외장 마감 완료',
+      description: '보온재 교체 완료',
+    });
+
+    expect(report.beforeDescription).toBe('노후 보온재 탈락으로 인한 열 손실 및 화상 위험 발생');
+    expect(report.afterDescription).toBe('난연성 글라스울 재시공 및 알루미늄 외장 마감 완료');
+  });
 });

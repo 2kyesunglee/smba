@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { LocalStateStore, StoreState, SafetyMaterial, MaterialSignature, PushHistoryItem } from '@/infrastructure/storage/LocalStateStore';
+import { LocalStateStore, StoreState, SafetyMaterial, MaterialSignature, PushHistoryItem, InspectionTarget, DocumentItem } from '@/infrastructure/storage/LocalStateStore';
 import { Worker, WorkerProps } from '@/domain/entities/Worker';
 import { PTWRequest } from '@/domain/entities/PTWRequest';
 import { Inspection } from '@/domain/entities/Inspection';
@@ -9,6 +9,7 @@ import { EquipmentQR } from '@/domain/entities/EquipmentQR';
 import { Template } from '@/domain/entities/Template';
 import { Signature } from '@/domain/entities/Signature';
 import { WorkReport } from '@/domain/entities/WorkReport';
+import { EquipmentUsageLog, EquipmentUsageLogProps } from '@/domain/entities/EquipmentUsageLog';
 
 interface AppContextType extends StoreState {
   hasActiveSOS: boolean;
@@ -28,7 +29,7 @@ interface AppContextType extends StoreState {
   resolveSOS: (id: string) => void;
   submitInspection: (equipmentId: string, equipmentName: string, data: Record<string, any>, isAbnormal?: boolean, abnormalNotes?: string) => void;
   submitSignature: (refType: 'TBM' | 'SAFETY_EDUCATION' | 'PTW', refId: string, refTitle: string, dataUrl: string) => void;
-  submitWorkReport: (taskName: string, location: string, beforeImg: string, afterImg: string, description: string, beforeImgs?: string[], afterImgs?: string[]) => void;
+  submitWorkReport: (taskName: string, location: string, beforeImg: string, afterImg: string, description: string, beforeImgs?: string[], afterImgs?: string[], beforeDescription?: string, afterDescription?: string) => void;
   createEquipmentQR: (eq: Partial<EquipmentQR>) => void;
   createTemplate: (tpl: Partial<Template>) => void;
   addSafetyMaterial: (material: SafetyMaterial) => void;
@@ -37,6 +38,14 @@ interface AppContextType extends StoreState {
   addPushHistory: (item: PushHistoryItem) => void;
   updatePushHistory: (id: string, updated: Partial<PushHistoryItem>) => void;
   deletePushHistory: (id: string) => void;
+  requestEquipmentUsage: (data: Partial<EquipmentUsageLogProps>) => void;
+  approveEquipmentUsage: (id: string, adminName?: string) => void;
+  rejectEquipmentUsage: (id: string, reason: string, adminName?: string) => void;
+  addEquipmentType: (type: string) => void;
+  addInspectionTarget: (target: InspectionTarget) => void;
+  deleteInspectionTarget: (id: string) => void;
+  addDocument: (doc: DocumentItem) => void;
+  deleteDocument: (id: string) => void;
   switchRole: (role: 'admin' | 'worker') => void;
   setActiveWorker: (workerId: string) => void;
   switchLanguage: (lang: string) => void;
@@ -148,7 +157,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     afterImg: string,
     description: string,
     beforeImgs?: string[],
-    afterImgs?: string[]
+    afterImgs?: string[],
+    beforeDescription?: string,
+    afterDescription?: string
   ) => {
     const report = new WorkReport({
       id: 'rep-' + Date.now(),
@@ -161,6 +172,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       beforeImgs: beforeImgs || (beforeImg ? [beforeImg] : []),
       afterImgs: afterImgs || (afterImg ? [afterImg] : []),
       description,
+      beforeDescription,
+      afterDescription,
     });
     store.addWorkReport(report);
   };
@@ -203,6 +216,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     store.updatePushHistory(id, updated);
   const deletePushHistory = (id: string) => store.deletePushHistory(id);
 
+  const requestEquipmentUsage = (data: Partial<EquipmentUsageLogProps>) => {
+    const log = EquipmentUsageLog.create({
+      id: 'eq-log-' + Date.now(),
+      equipmentType: data.equipmentType || '지게차',
+      equipmentNumber: data.equipmentNumber || '장비 1호',
+      workerId: currentWorker.id,
+      workerName: currentWorker.name,
+      purpose: data.purpose || '공장 내 이송 작업',
+      startTime: data.startTime || '2026-10-20 09:00',
+      endTime: data.endTime || '2026-10-20 12:00',
+      location: data.location || '생산 구역',
+      hasLicense: data.hasLicense ?? true,
+      preCheckCompleted: data.preCheckCompleted ?? true,
+      status: 'REQUESTED',
+    });
+    store.requestEquipmentUsage(log);
+  };
+
+  const approveEquipmentUsage = (id: string, adminName: string = '김공장장 (안전관리자)') =>
+    store.approveEquipmentUsage(id, adminName);
+  const rejectEquipmentUsage = (id: string, reason: string, adminName: string = '김공장장 (안전관리자)') =>
+    store.rejectEquipmentUsage(id, reason, adminName);
+  const addEquipmentType = (type: string) => store.addEquipmentType(type);
+
+  const addInspectionTarget = (target: InspectionTarget) => store.addInspectionTarget(target);
+  const deleteInspectionTarget = (id: string) => store.deleteInspectionTarget(id);
+
+  const addDocument = (doc: DocumentItem) => store.addDocument(doc);
+  const deleteDocument = (id: string) => store.deleteDocument(id);
+
   const switchRole = (role: 'admin' | 'worker') => store.setRole(role);
   const setActiveWorker = (id: string) => store.setActiveWorker(id);
   const switchLanguage = (lang: string) => store.setLanguage(lang);
@@ -237,6 +280,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPushHistory,
         updatePushHistory,
         deletePushHistory,
+        requestEquipmentUsage,
+        approveEquipmentUsage,
+        rejectEquipmentUsage,
+        addEquipmentType,
+        addInspectionTarget,
+        deleteInspectionTarget,
+        addDocument,
+        deleteDocument,
         switchRole,
         setActiveWorker,
         switchLanguage,

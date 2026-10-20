@@ -26,6 +26,13 @@ import {
   Users,
   Check,
   Download,
+  Truck,
+  UserCheck,
+  UserX,
+  Bell,
+  CheckSquare,
+  Square,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const SafetyHealthView: React.FC = () => {
@@ -35,6 +42,8 @@ export const SafetyHealthView: React.FC = () => {
     sosList,
     safetyMaterials,
     pushHistories,
+    equipmentUsageLogs,
+    equipmentTypes,
     approvePTW,
     rejectPTW,
     resolveSOS,
@@ -44,16 +53,19 @@ export const SafetyHealthView: React.FC = () => {
     addPushHistory,
     updatePushHistory,
     deletePushHistory,
+    approveEquipmentUsage,
+    rejectEquipmentUsage,
+    addEquipmentType,
   } = useAppStore();
 
   const translationService = new MultiLanguageTranslationService();
 
-  // Tab State: Safety Education is now first (left-most)
-  const [activeSection, setActiveSection] = useState<'education' | 'tbm' | 'instruction' | 'ptw' | 'sos'>('education');
+  // Tab State: safety sections
+  const [activeSection, setActiveSection] = useState<'education' | 'tbm' | 'equipment_logs' | 'instruction' | 'ptw' | 'sos'>('education');
 
-  // Push Instruction State
-  const [instructionText, setInstructionText] = useState('오늘 스크러버 배관 용접 작업 주의');
-  const [targetWorkerId, setTargetWorkerId] = useState('ALL');
+  // Push Instruction State (Request #3: 자유로운 버튼 형태 수신자 선택)
+  const [instructionText, setInstructionText] = useState('오늘 스크러버 배관 용접 작업 주의. 안전그네 및 소화기 배치 필수.');
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>(['ALL']);
   const [previewLanguage, setPreviewLanguage] = useState('vi');
   const [pushSentMessage, setPushSentMessage] = useState<string | null>(null);
 
@@ -83,54 +95,60 @@ export const SafetyHealthView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  // Signatures View Modal
+  // Signatures View Modal (Request #5: 서명자리스트 / 미서명자리스트 & 엑셀다운로드)
   const [viewingSignaturesMaterial, setViewingSignaturesMaterial] = useState<SafetyMaterial | null>(null);
+  const [signatureModalTab, setSignatureModalTab] = useState<'signed' | 'unsigned'>('signed');
+
+  // Equipment Usage Logs Filter & Tab (Request #7)
+  const [selectedEquipmentTypeFilter, setSelectedEquipmentTypeFilter] = useState<string>('ALL');
+  const [isAddEquipmentTypeModalOpen, setIsAddEquipmentTypeModalOpen] = useState(false);
+  const [newEquipmentTypeName, setNewEquipmentTypeName] = useState('');
+
+  // Receiver Button Selection Toggle (Request #3)
+  const toggleSelectWorker = (workerId: string) => {
+    if (workerId === 'ALL') {
+      setSelectedWorkerIds(['ALL']);
+      return;
+    }
+
+    let next = selectedWorkerIds.filter((id) => id !== 'ALL');
+    if (next.includes(workerId)) {
+      next = next.filter((id) => id !== workerId);
+      if (next.length === 0) next = ['ALL'];
+    } else {
+      next.push(workerId);
+    }
+    setSelectedWorkerIds(next);
+  };
 
   // Handle Push Send
   const handleSendPush = (e: React.FormEvent) => {
     e.preventDefault();
     if (!instructionText) return;
 
-    const targetDesc =
-      targetWorkerId === 'ALL'
-        ? '전체 현장 근로자 (17개국 25명 동시 발송)'
-        : workers.find((w) => w.id === targetWorkerId)
-        ? `${workers.find((w) => w.id === targetWorkerId)?.name} (${workers.find((w) => w.id === targetWorkerId)?.nationality})`
-        : '지정 근로자';
+    const isAll = selectedWorkerIds.includes('ALL');
+    const targetDesc = isAll
+      ? '전체 현장 근로자 (17개국 25명 동시 발송)'
+      : workers
+          .filter((w) => selectedWorkerIds.includes(w.id))
+          .map((w) => `${w.name}(${w.nationality})`)
+          .join(', ');
 
     const newPushItem: PushHistoryItem = {
       id: 'push-' + Date.now(),
       sentAt: new Date().toLocaleString(),
       target: targetDesc,
-      targetWorkerId,
+      targetWorkerId: isAll ? 'ALL' : selectedWorkerIds.join(','),
       instructionText,
       status: 'DELIVERED',
     };
 
     addPushHistory(newPushItem);
-    setPushSentMessage(`[푸시 발송 성공] "${instructionText}" 내용이 하단 발송 이력에 기록되고 16개국 모국어로 푸시 전송되었습니다.`);
+    setPushSentMessage(`[작업지시 발송 성공] 선택된 대상(${targetDesc})에게 모국어로 자동 번역되어 실시간 전송되었습니다.`);
     setTimeout(() => setPushSentMessage(null), 5000);
   };
 
-  // Handle Push History Edit Submit
-  const handleSaveEditPush = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingPush) return;
-    updatePushHistory(editingPush.id, editingPush);
-    setEditingPush(null);
-    alert('푸시 알림 이력이 성공적으로 수정되었습니다.');
-  };
-
-  // Handle PTW Reject
-  const handleConfirmReject = () => {
-    if (rejectingPtwId && rejectReason) {
-      rejectPTW(rejectingPtwId, rejectReason);
-      setRejectingPtwId(null);
-      setRejectReason('');
-    }
-  };
-
-  // Handle PDF Material Upload
+  // Handle Material Upload
   const handleMaterialUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMaterialForm.title) {
@@ -162,10 +180,48 @@ export const SafetyHealthView: React.FC = () => {
       description: '',
       targetDepartment: '전 생산라인 및 정비팀',
     });
-    alert(`[PDF 교안 등록 완료] ${item.title} 파일이 성공적으로 등록되었습니다.`);
+    alert(`[PDF 교안 등록 완료] ${item.title} 교안이 등록되었습니다.`);
   };
 
-  // Canvas Handlers for Worker Signature
+  // Add Equipment Tab (Request #7)
+  const handleAddEquipmentTypeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEquipmentTypeName.trim()) return;
+    addEquipmentType(newEquipmentTypeName.trim());
+    setSelectedEquipmentTypeFilter(newEquipmentTypeName.trim());
+    setIsAddEquipmentTypeModalOpen(false);
+    setNewEquipmentTypeName('');
+    alert(`[신규 탭 생성 완료] "${newEquipmentTypeName.trim()}" 기기 사용 일지 탭이 생성되었습니다.`);
+  };
+
+  // Export Signatures to Excel/CSV (Request #5)
+  const handleExportSignaturesExcel = (material: SafetyMaterial) => {
+    const signedList = material.signatures;
+    const unsignedList = workers.filter(
+      (w) => w.status === 'ACTIVE' && !material.signatures.some((s) => s.workerId === w.id)
+    );
+
+    let content = '구분,교안제목,성명,국적,서명상태,서명일시,전자서명데이터유무\n';
+
+    signedList.forEach((s) => {
+      content += `"${material.type}","${material.title}","${s.workerName}","${s.nationality}",서명완료,"${s.signedAt}","${s.signatureDataUrl ? '이미지서명보관' : '서명완료'}"\n`;
+    });
+
+    unsignedList.forEach((u) => {
+      content += `"${material.type}","${material.title}","${u.name}","${u.nationality}",미서명(대기),"-","미서명"\n`;
+    });
+
+    const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `[서명이수명부]_${material.title.slice(0, 15)}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Canvas Handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -179,7 +235,7 @@ export const SafetyHealthView: React.FC = () => {
     ctx.moveTo(x, y);
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#1E3A8A';
+    ctx.strokeStyle = '#0071E3';
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -206,7 +262,6 @@ export const SafetyHealthView: React.FC = () => {
     setHasSigned(false);
   };
 
-  // Complete Signature Submission
   const handleCompleteMaterialSignature = () => {
     if (!readingMaterial) return;
     const w = workers.find((item) => item.id === signingWorkerId) || workers[0];
@@ -222,798 +277,988 @@ export const SafetyHealthView: React.FC = () => {
       signatureDataUrl: dataUrl,
     });
 
-    alert(`[열람 및 서명 완료] ${w.name} 근로자의 서명이 안전 교안에 등록되었습니다.`);
+    alert(`[서명 등록 완료] ${w.name} 근로자의 서명이 안전 교안에 등록되었습니다.`);
     setReadingMaterial(null);
     setHasSigned(false);
   };
 
   const translatedPreview = translationService.translateInstruction(instructionText, previewLanguage);
-
   const educationMaterials = safetyMaterials.filter((m) => m.type === 'SAFETY_EDUCATION');
   const tbmMaterials = safetyMaterials.filter((m) => m.type === 'TBM');
+
+  // Filtered Equipment Usage Logs
+  const filteredEquipmentLogs = equipmentUsageLogs.filter((log) => {
+    if (selectedEquipmentTypeFilter === 'ALL') return true;
+    return log.equipmentType === selectedEquipmentTypeFilter;
+  });
 
   return (
     <div className="space-y-6">
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2.5">
-            <ShieldAlert className="w-7 h-7 text-amber-500" />
+          <h2 className="text-2xl font-bold text-[#1D1D1F] flex items-center gap-2.5">
+            <ShieldAlert className="w-7 h-7 text-[#0071E3]" />
             현장 안전 및 보건 관리 (Safety & Health)
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            안전교육 PDF 교안 관리 및 서명, 작업 전 TBM 전자서명 아카이브, 17개국 다국어 업무 지시 및 PTW 심사
+          <p className="text-xs text-[#86868B] font-medium mt-1">
+            안전교육 및 TBM 교안 서명 현황, 지게차·고소작업대 기기사용일지, 17개국 다국어 작업지시 및 PTW 심사
           </p>
         </div>
 
-        {/* Quick action buttons depending on active tab */}
         {(activeSection === 'education' || activeSection === 'tbm') && (
           <button
             onClick={() => {
               setMaterialUploadType(activeSection === 'education' ? 'SAFETY_EDUCATION' : 'TBM');
               setIsUploadModalOpen(true);
             }}
-            className="btn-primary shadow-lg shadow-blue-500/20 text-xs px-4 py-2.5 flex items-center gap-2"
+            className="btn-primary shadow-sm text-xs px-4 py-2.5 flex items-center gap-2"
           >
             <Upload className="w-4 h-4" />
-            <span>{activeSection === 'education' ? '신규 안전교육 PDF 교안 등록' : '신규 TBM PDF 교안 등록'}</span>
+            <span>{activeSection === 'education' ? '안전교육 교안 등록' : 'TBM 교안 등록'}</span>
           </button>
         )}
       </div>
 
-      {/* Navigation Tabs (Enlarged and Re-ordered: Education first, TBM second, Push third, PTW fourth, SOS fifth) */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 pb-3">
-        {/* Tab 1: 안전교육 교안 & 서명 (Left-most) */}
+      {/* Navigation Tabs (Apple Segmented Bar) */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 bg-[#E8E8ED]/70 rounded-2xl border border-black/5">
         <button
           onClick={() => setActiveSection('education')}
-          className={`px-5 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-sm flex items-center gap-2.5 ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
             activeSection === 'education'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20 scale-[1.02]'
-              : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
           }`}
         >
-          <FileText className="w-4 h-4" />
+          <FileText className="w-4 h-4 text-[#0071E3]" />
           <span>안전교육 교안 & 서명</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-            activeSection === 'education' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {educationMaterials.length}건
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#F5F5F7] text-[#1D1D1F] font-bold">
+            {educationMaterials.length}
           </span>
         </button>
 
-        {/* Tab 2: TBM & 서명 */}
         <button
           onClick={() => setActiveSection('tbm')}
-          className={`px-5 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-sm flex items-center gap-2.5 ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
             activeSection === 'tbm'
-              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20 scale-[1.02]'
-              : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
           }`}
         >
-          <FileSignature className="w-4 h-4" />
+          <FileSignature className="w-4 h-4 text-[#34C759]" />
           <span>TBM & 서명</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-            activeSection === 'tbm' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-          }`}>
-            {tbmMaterials.length}건
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#F5F5F7] text-[#1D1D1F] font-bold">
+            {tbmMaterials.length}
           </span>
         </button>
 
-        {/* Tab 3: 다국어 업무지시 및 푸시 알림 */}
+        {/* Request #7: 기기 사용 일지 탭 */}
+        <button
+          onClick={() => setActiveSection('equipment_logs')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
+            activeSection === 'equipment_logs'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
+          }`}
+        >
+          <Truck className="w-4 h-4 text-[#AF52DE]" />
+          <span>기기 사용 일지 (지게차/크레인 등)</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#F5F5F7] text-[#1D1D1F] font-bold">
+            {equipmentUsageLogs.length}건
+          </span>
+        </button>
+
         <button
           onClick={() => setActiveSection('instruction')}
-          className={`px-5 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-sm flex items-center gap-2.5 ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
             activeSection === 'instruction'
-              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 scale-[1.02]'
-              : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
           }`}
         >
-          <Send className="w-4 h-4" />
-          <span>다국어 업무지시 및 푸시 알림</span>
+          <Send className="w-4 h-4 text-[#0071E3]" />
+          <span>16개국어 작업지시 발송</span>
         </button>
 
-        {/* Tab 4: 안전작업허가서(PTW) 심사 */}
         <button
           onClick={() => setActiveSection('ptw')}
-          className={`px-5 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-sm flex items-center gap-2.5 ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
             activeSection === 'ptw'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 scale-[1.02]'
-              : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
           }`}
         >
-          <FileCheck2 className="w-4 h-4" />
-          <span>안전작업허가서(PTW) 심사</span>
+          <FileCheck2 className="w-4 h-4 text-[#FF9500]" />
+          <span>PTW 작업허가 심사</span>
           {ptwList.filter((p) => p.status === 'REQUESTED').length > 0 && (
-            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold animate-pulse">
-              {ptwList.filter((p) => p.status === 'REQUESTED').length}건
+            <span className="bg-[#FF9500] text-white text-[11px] px-1.5 py-0.5 rounded-full font-bold">
+              {ptwList.filter((p) => p.status === 'REQUESTED').length}
             </span>
           )}
         </button>
 
-        {/* Tab 5: SOS 비상호출 이력 */}
         <button
           onClick={() => setActiveSection('sos')}
-          className={`px-5 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-sm flex items-center gap-2.5 ${
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
             activeSection === 'sos'
-              ? 'bg-red-600 text-white shadow-md shadow-red-500/20 scale-[1.02]'
-              : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
           }`}
         >
-          <Radio className="w-4 h-4" />
-          <span>SOS 비상호출 이력</span>
-          {sosList.filter((s) => s.status === 'TRIGGERED').length > 0 && (
-            <span className="bg-yellow-400 text-slate-950 text-xs px-2 py-0.5 rounded-full font-extrabold animate-pulse">
-              긴급 {sosList.filter((s) => s.status === 'TRIGGERED').length}
-            </span>
-          )}
+          <Radio className="w-4 h-4 text-[#FF3B30]" />
+          <span>SOS 비상 관제</span>
         </button>
       </div>
 
-      {/* =========================================================================
-          Tab 1: 안전교육 교안 & 서명 (PDF 업로드/삭제 및 열람/서명 아카이브)
-          ========================================================================= */}
-      {activeSection === 'education' && (
+      {/* SECTION 1 & 2: Safety Education & TBM Materials */}
+      {(activeSection === 'education' || activeSection === 'tbm') && (
         <div className="space-y-4">
-          <div className="glass-card p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 mb-4">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                  관리자 안전교육 PDF 교안 등록 및 근로자 서명 보관 관리
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                  관리자는 안전보건교육 자료를 PDF 파일로 업로드/삭제할 수 있으며, 근로자가 열람 후 서명한 기록이 실시간 아카이빙됩니다.
-                </p>
-              </div>
-              <span className="badge badge-blue">산업안전보건법 제29조 교육 증빙</span>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(activeSection === 'education' ? educationMaterials : tbmMaterials).map((mat) => {
+              const signedCount = mat.signatures.length;
+              const totalActiveWorkers = workers.filter((w) => w.status === 'ACTIVE').length;
+              const unsignedCount = Math.max(0, totalActiveWorkers - signedCount);
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {educationMaterials.map((mat) => (
-                <div
-                  key={mat.id}
-                  className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between space-y-4"
-                >
+              return (
+                <div key={mat.id} className="glass-card p-5 space-y-4 flex flex-col justify-between">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="badge badge-purple">{mat.category}</span>
-                      <span className="text-xs text-slate-400 font-medium">등록일: {mat.uploadedAt}</span>
+                      <span className="badge badge-blue text-[11px] font-semibold">{mat.category}</span>
+                      <span className="text-[11px] text-[#86868B] font-mono">{mat.uploadedAt}</span>
                     </div>
 
-                    <h4 className="font-extrabold text-base text-slate-900 leading-snug">{mat.title}</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">{mat.description}</p>
+                    <h3 className="font-bold text-base text-[#1D1D1F] leading-snug">{mat.title}</h3>
+                    <p className="text-xs text-[#6E6E73] leading-relaxed">{mat.description}</p>
 
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold">
-                        <FileText className="w-4 h-4 text-red-500" />
-                        <span>{mat.fileName}</span>
-                        <span className="text-slate-400 font-normal">({mat.fileSize})</span>
+                    <div className="p-3 bg-[#F5F5F7] rounded-xl flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-[#0071E3]" />
+                        <span className="font-medium text-[#1D1D1F]">{mat.fileName}</span>
+                        <span className="text-[#86868B] text-[11px]">({mat.fileSize})</span>
                       </div>
-                      <span className="text-blue-600 text-xs font-semibold">PDF 원본</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-slate-500">대상 공정: <strong className="text-slate-800">{mat.targetDepartment}</strong></span>
-                      <span className="badge badge-green font-bold">
-                        서명 완료: {mat.signatures.length}명
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="badge badge-green text-[11px]">서명: {signedCount}명</span>
+                        {unsignedCount > 0 && (
+                          <span className="badge badge-amber text-[11px]">미서명: {unsignedCount}명</span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  {/* Actions (Request #5: 서명자/미서명자 리스트 확인 & 엑셀 다운로드) */}
+                  <div className="flex items-center justify-between pt-3 border-t border-black/5 gap-2">
                     <button
-                      onClick={() => setViewingSignaturesMaterial(mat)}
-                      className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                      onClick={() => handleExportSignaturesExcel(mat)}
+                      className="btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
+                      title="서명 내역 엑셀 다운로드"
                     >
-                      <Users className="w-3.5 h-3.5 text-blue-600" />
-                      <span>서명자 명부 ({mat.signatures.length})</span>
+                      <Download className="w-3.5 h-3.5 text-[#0071E3]" />
+                      <span>서명 명부 엑셀</span>
                     </button>
 
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => {
-                          setReadingMaterial(mat);
-                          clearCanvas();
+                          setViewingSignaturesMaterial(mat);
+                          setSignatureModalTab('signed');
                         }}
-                        className="btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500"
+                        className="btn-secondary text-xs py-2 px-3"
                       >
-                        <FileSignature className="w-3.5 h-3.5" />
-                        <span>교안 열람 및 서명</span>
+                        <Users className="w-3.5 h-3.5 text-[#6E6E73]" />
+                        <span>서명/미서명 현황 ({signedCount}/{totalActiveWorkers})</span>
                       </button>
 
                       <button
                         onClick={() => {
-                          if (confirm(`"${mat.title}" 교안을 삭제하시겠습니까?`)) {
-                            deleteSafetyMaterial(mat.id);
-                          }
+                          setReadingMaterial(mat);
+                          setSigningWorkerId(workers[0]?.id || 'w-1');
                         }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="교안 삭제"
+                        className="btn-primary text-xs py-2 px-3.5"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <FileSignature className="w-3.5 h-3.5" />
+                        <span>열람 및 전자서명</span>
                       </button>
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* =========================================================================
-          Tab 2: TBM & 서명 (작업 전 안전점검 PDF 업로드/삭제 및 서명 보관)
-          ========================================================================= */}
-      {activeSection === 'tbm' && (
+      {/* SECTION 3: Equipment Usage Logs (Request #7: 지게차, 고소작업대, 스카이, 크레인 + 동적 탭) */}
+      {activeSection === 'equipment_logs' && (
         <div className="space-y-4">
-          <div className="glass-card p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200 mb-4">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                  <FileSignature className="w-5 h-5 text-emerald-600" />
-                  작업 전 안전점검(TBM) PDF 교안 및 전자서명 아카이브
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                  관리자가 공정별 TBM 위험성평가 교육자료를 PDF로 업로드/삭제하고, 작업자가 작업 착수 전 숙지 후 서명한 증빙을 영구 보관합니다.
-                </p>
-              </div>
-              <span className="badge badge-green">중대재해처벌법 TBM 표준 이수 대장</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {tbmMaterials.map((mat) => (
-                <div
-                  key={mat.id}
-                  className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between space-y-4"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="badge badge-amber">{mat.category}</span>
-                      <span className="text-xs text-slate-400 font-medium">TBM 일자: {mat.uploadedAt}</span>
-                    </div>
-
-                    <h4 className="font-extrabold text-base text-slate-900 leading-snug">{mat.title}</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed">{mat.description}</p>
-
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold">
-                        <FileText className="w-4 h-4 text-emerald-600" />
-                        <span>{mat.fileName}</span>
-                        <span className="text-slate-400 font-normal">({mat.fileSize})</span>
-                      </div>
-                      <span className="text-emerald-700 text-xs font-semibold">TBM PDF</span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-slate-500">대상 공정: <strong className="text-slate-800">{mat.targetDepartment}</strong></span>
-                      <span className="badge badge-green font-bold">
-                        서명 확인: {mat.signatures.length}명
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => setViewingSignaturesMaterial(mat)}
-                      className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
-                    >
-                      <Users className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>서명자 명부 ({mat.signatures.length})</span>
-                    </button>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setReadingMaterial(mat);
-                          clearCanvas();
-                        }}
-                        className="btn-primary text-xs py-1.5 px-3.5 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500"
-                      >
-                        <FileSignature className="w-3.5 h-3.5" />
-                        <span>TBM 열람 및 서명</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          if (confirm(`"${mat.title}" TBM 교안을 삭제하시겠습니까?`)) {
-                            deleteSafetyMaterial(mat.id);
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="TBM 교안 삭제"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          Tab 3: 다국어 업무 지시 및 푸시 알림 + 하단 발송 이력 관리 (Item #10)
-          ========================================================================= */}
-      {activeSection === 'instruction' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left: Push Sending Form */}
-            <div className="glass-card p-5 space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-200">
-                <Send className="w-5 h-5 text-blue-600" />
-                <h3 className="font-bold text-slate-900 text-base">한국어 작업 지시 작성 및 즉시 푸시 발송</h3>
-              </div>
-
-              <form onSubmit={handleSendPush} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    수신 대상 근로자 선택
-                  </label>
-                  <select
-                    value={targetWorkerId}
-                    onChange={(e) => setTargetWorkerId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-blue-500"
-                  >
-                    <option value="ALL">전체 현장 근로자 (17개국 25명 동시 발송)</option>
-                    {workers.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} ({w.koreanName || w.nationality}) - {w.phoneNumber}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    지시 사항 입력 (한국어)
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={instructionText}
-                    onChange={(e) => setInstructionText(e.target.value)}
-                    placeholder="예: 오늘 스크러버 배관 용접 작업 주의, 화재 감시자 1인 상주 필수"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 font-medium">
-                  🌐 관리자가 한국어로 입력하면 번역 엔진이 각 근로자의 인사기록카드 국적에 맞추어 16개국 모국어로 즉시 변환하여 스마트폰 앱에 푸시 전송합니다.
-                </div>
-
-                <button type="submit" className="btn-primary w-full justify-center text-xs py-2.5">
-                  <Send className="w-4 h-4" />
-                  다국어 푸시 알림 즉시 발송
-                </button>
-
-                {pushSentMessage && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <span>{pushSentMessage}</span>
-                  </div>
-                )}
-              </form>
-            </div>
-
-            {/* Right: Real-time Translation Preview Box */}
-            <div className="glass-card p-5 space-y-4 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                  <div className="flex items-center gap-2">
-                    <Languages className="w-5 h-5 text-indigo-600" />
-                    <h3 className="font-bold text-slate-900 text-base">근로자 앱 수신 화면 실시간 프리뷰</h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-medium">언어:</span>
-                    <select
-                      value={previewLanguage}
-                      onChange={(e) => setPreviewLanguage(e.target.value)}
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800"
-                    >
-                      {SUPPORTED_LANGUAGES.filter((l) => l.code !== 'ko').map((l) => (
-                        <option key={l.code} value={l.code}>
-                          {l.flag} {l.name} ({l.nativeName})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Smartphone Mockup */}
-                <div className="mt-4 mx-auto max-w-sm bg-slate-900 border-4 border-slate-700 rounded-3xl p-4 shadow-xl text-white">
-                  <div className="w-20 h-3 bg-slate-700 rounded-full mx-auto mb-3"></div>
-
-                  <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 shadow-md space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="flex items-center gap-1 text-blue-400 font-bold">
-                        <ShieldAlert className="w-3.5 h-3.5" />
-                        SafeGuard PUSH ALERT
-                      </span>
-                      <span>방금 전</span>
-                    </div>
-
-                    <div className="font-bold text-white text-xs">
-                      {translationService.getLanguageInfo(previewLanguage).flag}{' '}
-                      {translationService.getLanguageInfo(previewLanguage).nativeName} 번역 알림
-                    </div>
-
-                    <div className="p-3 bg-slate-950/70 rounded-lg border border-slate-800 text-xs text-blue-200 leading-relaxed font-sans">
-                      {translatedPreview}
-                    </div>
-
-                    <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-700">
-                      원문 (한국어): {instructionText}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center text-[11px] text-slate-400 font-medium">
-                * 근로자 모바일 뷰어 시뮬레이터에서도 동일한 번역 콘텐츠를 확인할 수 있습니다.
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom: 푸시 알림 발송 이력 관리 (Item #10 - 리스트, 수정, 삭제) */}
           <div className="glass-card p-5 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/5">
               <div>
-                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-indigo-600" />
-                  푸시 알림 발송 이력 관리 (수정 및 삭제 가능)
+                <h3 className="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-[#0071E3]" />
+                  중장비 및 특수 기기 사용 일지 관리
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                  발송된 다국어 푸시 알림 내역을 조회하고, 내용을 수정하거나 삭제할 수 있습니다.
+                <p className="text-xs text-[#86868B] mt-0.5">
+                  근로자 스마트폰 신청 내역을 관리자가 심사 승인하고, 기기별 사용 기록을 영구 보관합니다.
                 </p>
               </div>
-              <span className="badge badge-blue">누적 {pushHistories.length}건 발송됨</span>
+
+              <button
+                onClick={() => setIsAddEquipmentTypeModalOpen(true)}
+                className="btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-none"
+              >
+                <Plus className="w-4 h-4 text-[#0071E3]" />
+                <span>+ 신규 기기 탭 추가</span>
+              </button>
             </div>
 
-            <div className="table-container">
-              <table className="custom-table">
-                <thead>
+            {/* Equipment Filter Chips */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                onClick={() => setSelectedEquipmentTypeFilter('ALL')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  selectedEquipmentTypeFilter === 'ALL'
+                    ? 'bg-[#0071E3] text-white shadow-sm'
+                    : 'bg-[#F5F5F7] text-[#6E6E73] hover:text-[#1D1D1F]'
+                }`}
+              >
+                전체 기기 ({equipmentUsageLogs.length})
+              </button>
+
+              {equipmentTypes.map((type) => {
+                const count = equipmentUsageLogs.filter((l) => l.equipmentType === type).length;
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setSelectedEquipmentTypeFilter(type)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                      selectedEquipmentTypeFilter === type
+                        ? 'bg-[#0071E3] text-white shadow-sm'
+                        : 'bg-[#F5F5F7] text-[#6E6E73] hover:text-[#1D1D1F]'
+                    }`}
+                  >
+                    <span>{type}</span>
+                    <span className="text-[10px] opacity-80">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Equipment Usage Table */}
+          <div className="table-container shadow-sm">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>기기 종류</th>
+                  <th>기기 번호</th>
+                  <th>신청 근로자</th>
+                  <th>사용 목적</th>
+                  <th>사용 예정 시간</th>
+                  <th>작업 장소</th>
+                  <th>면허·사전점검</th>
+                  <th>승인 상태</th>
+                  <th className="text-right">관리 심사</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEquipmentLogs.length === 0 ? (
                   <tr>
-                    <th>발송 일시</th>
-                    <th>수신 대상</th>
-                    <th>지시사항 내용 (한국어 원문)</th>
-                    <th>상태</th>
-                    <th className="text-right">관리 작업</th>
+                    <td colSpan={9} className="text-center py-10 text-[#86868B] text-xs">
+                      등록된 기기 사용 일지가 없습니다.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {pushHistories.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-6 text-slate-400 text-xs">
-                        발송된 푸시 알림 이력이 없습니다.
+                ) : (
+                  filteredEquipmentLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-[#F9FAFB]">
+                      <td>
+                        <span className="badge badge-blue font-bold text-xs">{log.equipmentType}</span>
                       </td>
-                    </tr>
-                  ) : (
-                    pushHistories.map((h) => (
-                      <tr key={h.id}>
-                        <td className="font-mono text-xs text-slate-600 whitespace-nowrap">{h.sentAt}</td>
-                        <td className="text-xs font-semibold text-slate-800">{h.target}</td>
-                        <td className="text-xs text-slate-700 max-w-md">
-                          <p className="line-clamp-2">{h.instructionText}</p>
-                        </td>
-                        <td>
-                          <span className="badge badge-green text-[10px]">
-                            <Check className="w-3 h-3" /> 발송 완료
-                          </span>
-                        </td>
-                        <td className="text-right whitespace-nowrap">
+                      <td className="font-mono text-xs text-[#1D1D1F]">{log.equipmentNumber || '-'}</td>
+                      <td className="font-semibold text-[#1D1D1F]">{log.workerName}</td>
+                      <td className="max-w-xs truncate text-[#6E6E73]">{log.purpose}</td>
+                      <td className="font-mono text-xs text-[#1D1D1F]">{log.startTime} ~ {log.endTime}</td>
+                      <td className="text-xs text-[#6E6E73]">{log.location || '공장 구역'}</td>
+                      <td>
+                        <div className="flex items-center gap-1">
+                          {log.hasLicense && <span className="badge badge-green text-[10px]">면허확인</span>}
+                          {log.preCheckCompleted && <span className="badge badge-blue text-[10px]">점검완료</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            log.status === 'APPROVED'
+                              ? 'badge-green'
+                              : log.status === 'REJECTED'
+                              ? 'badge-red'
+                              : 'badge-amber'
+                          }`}
+                        >
+                          {log.status === 'APPROVED' ? '승인완료' : log.status === 'REJECTED' ? '반려됨' : '승인대기'}
+                        </span>
+                      </td>
+                      <td className="text-right">
+                        {log.status === 'REQUESTED' ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
-                              onClick={() => setEditingPush({ ...h })}
-                              className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 hover:border-blue-300 hover:text-blue-600 shadow-sm"
+                              onClick={() => {
+                                approveEquipmentUsage(log.id, '김공장장 (안전관리자)');
+                                alert(`[승인 완료] ${log.workerName} 근로자의 ${log.equipmentType} 사용이 승인되었습니다.`);
+                              }}
+                              className="btn-primary text-xs py-1 px-2.5 bg-[#34C759] hover:bg-[#2FB34F]"
                             >
-                              <Pencil className="w-3.5 h-3.5 text-blue-600" />
-                              <span>수정</span>
+                              승인
                             </button>
                             <button
                               onClick={() => {
-                                if (confirm('이 푸시 알림 이력을 삭제하시겠습니까?')) {
-                                  deletePushHistory(h.id);
+                                const reason = prompt('반려 사유를 입력하세요:');
+                                if (reason) {
+                                  rejectEquipmentUsage(log.id, reason, '김공장장 (안전관리자)');
                                 }
                               }}
-                              className="btn-secondary text-xs py-1 px-2.5 text-red-600 hover:border-red-300 hover:bg-red-50 flex items-center gap-1 shadow-sm"
+                              className="btn-secondary text-xs py-1 px-2.5 text-[#FF3B30]"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>삭제</span>
+                              반려
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                        ) : (
+                          <span className="text-[11px] text-[#86868B] font-mono">
+                            {log.approvedBy || '-'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 4: 16개국어 작업지시 발송 (Request #3: 자유로운 버튼 형태 수신자 선택) */}
+      {activeSection === 'instruction' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 glass-card p-6 space-y-5">
+            <div className="pb-3 border-b border-black/5">
+              <h3 className="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
+                <Send className="w-5 h-5 text-[#0071E3]" />
+                작업지시서 수신 대상 근로자 선택 및 모국어 동시 발송
+              </h3>
+              <p className="text-xs text-[#86868B] mt-1">
+                아래 버튼들을 클릭하여 수신 대상 근로자를 자유롭게 선택하세요. 한국어로 작성하면 각 근로자의 모국어로 자동 번역되어 전달됩니다.
+              </p>
+            </div>
+
+            {/* Request #3: 수신대상 근로자 선택을 자유롭게 할 수 있는 버튼(토글 칩) 형태 */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#1D1D1F] block">
+                수신 대상 근로자 선택 (버튼 클릭 토글) *
+              </label>
+              <div className="flex flex-wrap gap-2 p-3 bg-[#F5F5F7] rounded-2xl border border-black/5">
+                {/* All workers button */}
+                <button
+                  type="button"
+                  onClick={() => toggleSelectWorker('ALL')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    selectedWorkerIds.includes('ALL')
+                      ? 'bg-[#0071E3] text-white shadow-sm scale-[1.02]'
+                      : 'bg-white text-[#6E6E73] hover:text-[#1D1D1F] border border-black/5'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>전체 현장 근로자 (17개국 25명 동시 발송)</span>
+                  {selectedWorkerIds.includes('ALL') && <Check className="w-3.5 h-3.5 ml-0.5" />}
+                </button>
+
+                {/* Individual Worker Buttons */}
+                {workers.map((w) => {
+                  const isSelected = selectedWorkerIds.includes(w.id);
+                  const country = SUPPORTED_LANGUAGES.find((l) => l.code === w.nationality.toLowerCase());
+                  const flag = country ? country.flag : '🌐';
+
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => toggleSelectWorker(w.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                        isSelected && !selectedWorkerIds.includes('ALL')
+                          ? 'bg-[#0071E3] text-white shadow-sm scale-[1.02]'
+                          : 'bg-white text-[#515154] hover:text-[#1D1D1F] border border-black/5'
+                      }`}
+                    >
+                      <span>{flag}</span>
+                      <span>{w.name}</span>
+                      <span className="text-[10px] opacity-80">({w.koreanName || w.nationality})</span>
+                      {isSelected && !selectedWorkerIds.includes('ALL') && (
+                        <Check className="w-3.5 h-3.5 ml-0.5 text-white" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="text-[11px] text-[#86868B]">
+                선택된 대상: <strong className="text-[#0071E3]">
+                  {selectedWorkerIds.includes('ALL')
+                    ? '전체 현장 근로자 동시 발송'
+                    : `${selectedWorkerIds.length}명 선택됨`}
+                </strong>
+              </div>
+            </div>
+
+            {/* Instruction Text Input */}
+            <form onSubmit={handleSendPush} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">
+                  작업 지시 및 안전 공지 내용 (한국어 원문) *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={instructionText}
+                  onChange={(e) => setInstructionText(e.target.value)}
+                  placeholder="예: 오늘 스크러버 배관 용접 작업 주의. 안전그네 및 소화기 2기 배치 필수."
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F] focus:bg-white focus:border-[#0071E3] transition-colors"
+                />
+              </div>
+
+              {pushSentMessage && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2 animate-fadeIn">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>{pushSentMessage}</span>
+                </div>
+              )}
+
+              <button type="submit" className="btn-primary w-full justify-center text-xs py-3 font-bold">
+                <Send className="w-4 h-4" />
+                선택 대상 근로자 모국어 실시간 발송
+              </button>
+            </form>
+          </div>
+
+          {/* Right Preview Card */}
+          <div className="glass-card p-6 space-y-4 flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-black/5">
+                <span className="font-bold text-xs text-[#1D1D1F]">모국어 번역 실시간 미리보기</span>
+                <select
+                  value={previewLanguage}
+                  onChange={(e) => setPreviewLanguage(e.target.value)}
+                  className="bg-[#F5F5F7] border border-black/5 rounded-lg px-2.5 py-1 text-xs text-[#1D1D1F]"
+                >
+                  {SUPPORTED_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.flag} {l.nativeName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3.5 bg-[#F5F5F7] rounded-xl space-y-2 text-xs">
+                <div className="text-[11px] text-[#86868B] font-semibold">
+                  {translationService.getLanguageInfo(previewLanguage).flag}{' '}
+                  {translationService.getLanguageInfo(previewLanguage).name} (모국어):
+                </div>
+                <div className="font-bold text-[#1D1D1F] leading-relaxed">
+                  {translatedPreview}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50/70 border border-blue-200/60 rounded-xl text-[11px] text-blue-900 leading-relaxed">
+              💡 근로자가 스마트폰에서 수신된 지시를 확인하고 서약하면 대시보드에 실시간 완료 표시됩니다.
             </div>
           </div>
         </div>
       )}
 
-      {/* =========================================================================
-          Tab 4: 안전작업허가서(PTW) 심사
-          ========================================================================= */}
+      {/* SECTION 5: PTW Request List */}
       {activeSection === 'ptw' && (
-        <div className="space-y-4">
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                  <FileCheck2 className="w-5 h-5 text-amber-500" />
-                  모바일 안전작업허가서(PTW) 심사 및 승인 관리
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                  근로자가 작업 착수 전 모바일 앱에서 안전수칙 확인 및 서명 요청한 건을 관리자가 심사하여 승인/반려합니다.
-                </p>
-              </div>
-              <span className="badge badge-amber font-mono font-bold">
-                승인 대기: {ptwList.filter((p) => p.status === 'REQUESTED').length}건
-              </span>
-            </div>
-
-            <div className="space-y-4">
+        <div className="table-container shadow-sm">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>허가서 번호</th>
+                <th>신청 근로자</th>
+                <th>작업 명칭</th>
+                <th>작업 위치</th>
+                <th>위험 요인</th>
+                <th>안전 대책</th>
+                <th>상태</th>
+                <th className="text-right">심사 액션</th>
+              </tr>
+            </thead>
+            <tbody>
               {ptwList.map((ptw) => (
-                <div
-                  key={ptw.id}
-                  className={`p-4 rounded-xl border transition-all ${
-                    ptw.status === 'REQUESTED'
-                      ? 'bg-amber-50/50 border-amber-300 shadow-sm'
-                      : ptw.status === 'APPROVED'
-                      ? 'bg-white border-slate-200'
-                      : 'bg-red-50 border-red-200'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                        {ptw.ptwNumber}
-                      </span>
-                      <h4 className="font-extrabold text-slate-900 text-base">{ptw.taskName}</h4>
-                    </div>
-
-                    <div>
-                      {ptw.status === 'REQUESTED' && (
-                        <span className="badge badge-amber animate-pulse font-bold">승인 심사 대기</span>
-                      )}
-                      {ptw.status === 'APPROVED' && (
-                        <span className="badge badge-green font-bold">작업 허가 발급완료</span>
-                      )}
-                      {ptw.status === 'REJECTED' && (
-                        <span className="badge badge-red font-bold">작업 불허 (반려)</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-3 text-xs">
-                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <span className="text-slate-500 font-semibold block mb-1">작업자 및 위치</span>
-                      <div className="font-bold text-slate-900">{ptw.workerName}</div>
-                      <div className="text-slate-600">{ptw.location}</div>
-                    </div>
-
-                    <div className="p-3 bg-red-50/60 rounded-lg border border-red-200">
-                      <span className="text-red-700 font-semibold block mb-1">위험 요인 (Hazard)</span>
-                      <div className="text-red-900 font-medium">{ptw.hazardFactors}</div>
-                    </div>
-
-                    <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200">
-                      <span className="text-emerald-700 font-semibold block mb-1">안전 대책 (Safety Measures)</span>
-                      <div className="text-emerald-900 font-medium">{ptw.safetyMeasures}</div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-slate-500 font-medium">
-                    <div>
-                      근로자 모바일 서명일시: {new Date(ptw.workerSignedAt || '').toLocaleString()}
-                      {ptw.approvedBy && (
-                        <span className="ml-3 text-emerald-700 font-bold">
-                          승인자: {ptw.approvedBy} ({new Date(ptw.approvedAt || '').toLocaleTimeString()})
-                        </span>
-                      )}
-                    </div>
-
-                    {ptw.status === 'REQUESTED' && (
-                      <div className="flex items-center gap-2">
+                <tr key={ptw.id} className="hover:bg-[#F9FAFB]">
+                  <td className="font-mono text-xs font-semibold text-[#1D1D1F]">{ptw.ptwNumber}</td>
+                  <td className="font-medium text-[#1D1D1F]">{ptw.workerName}</td>
+                  <td className="font-bold text-[#1D1D1F]">{ptw.taskName}</td>
+                  <td className="text-xs text-[#6E6E73]">{ptw.location}</td>
+                  <td className="text-xs text-[#FF3B30]">{ptw.hazardFactors}</td>
+                  <td className="text-xs text-[#6E6E73]">{ptw.safetyMeasures}</td>
+                  <td>
+                    <span className={`badge ${ptw.status === 'APPROVED' ? 'badge-green' : 'badge-amber'}`}>
+                      {ptw.status}
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    {ptw.status === 'REQUESTED' ? (
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => {
-                            setRejectingPtwId(ptw.id);
-                            setRejectReason('현장 환기장치 미비로 인한 보완 후 재요청');
+                            approvePTW(ptw.id);
+                            alert(`[PTW 승인] ${ptw.taskName} 허가서가 승인되었습니다.`);
                           }}
-                          className="btn-danger text-xs py-1.5 px-3"
+                          className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
                         >
-                          <XCircle className="w-3.5 h-3.5" />
-                          반려 처리
+                          승인
                         </button>
                         <button
-                          onClick={() => approvePTW(ptw.id)}
-                          className="btn-primary text-xs py-1.5 px-4 bg-emerald-600 hover:bg-emerald-500"
+                          onClick={() => {
+                            const reason = prompt('반려 사유:');
+                            if (reason) rejectPTW(ptw.id, reason);
+                          }}
+                          className="btn-secondary text-xs py-1 px-3 text-[#FF3B30]"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          최종 작업허가 승인
+                          반려
                         </button>
                       </div>
+                    ) : (
+                      <span className="text-[11px] text-[#86868B]">{ptw.approvedBy}</span>
                     )}
-                  </div>
-                </div>
+                  </td>
+                </tr>
               ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* =========================================================================
-          Tab 5: SOS 비상 호출 이력
-          ========================================================================= */}
+      {/* SECTION 6: SOS Alert 관제 */}
       {activeSection === 'sos' && (
-        <div className="space-y-4">
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+        <div className="table-container shadow-sm">
+          <table className="custom-table">
+            <thead>
+              <tr>
+                <th>발생 일시</th>
+                <th>근로자 성명</th>
+                <th>연락처</th>
+                <th>GPS 발생 위치</th>
+                <th>긴급 지원 메시지</th>
+                <th>상태</th>
+                <th className="text-right">조치</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sosList.map((sos) => (
+                <tr key={sos.id} className="hover:bg-[#F9FAFB]">
+                  <td className="font-mono text-xs">{sos.triggeredAt}</td>
+                  <td className="font-bold text-[#FF3B30]">{sos.workerName}</td>
+                  <td className="font-mono text-xs">{sos.phoneNumber}</td>
+                  <td className="font-semibold text-[#1D1D1F]">{sos.location}</td>
+                  <td className="text-xs text-[#515154]">{sos.message}</td>
+                  <td>
+                    <span className={`badge ${sos.status === 'TRIGGERED' ? 'badge-red' : 'badge-green'}`}>
+                      {sos.status}
+                    </span>
+                  </td>
+                  <td className="text-right">
+                    {sos.status === 'TRIGGERED' && (
+                      <button
+                        onClick={() => {
+                          resolveSOS(sos.id);
+                          alert('SOS 긴급 상황이 해제되었습니다.');
+                        }}
+                        className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
+                      >
+                        상황 해제
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* MODAL 1: Signatures & Unsigned Workers Status (Request #5: 30% 커진 크기 max-w-[884px]) */}
+      {viewingSignaturesMaterial && (
+        <div className="modal-overlay">
+          <div className="modal-content p-8 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-black/5">
               <div>
-                <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                  <Radio className="w-5 h-5 text-red-600" />
-                  SOS 비상 호출 수신 및 현장 조치 이력
+                <h3 className="text-lg font-bold text-[#1D1D1F] flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-[#0071E3]" />
+                  [{viewingSignaturesMaterial.type === 'SAFETY_EDUCATION' ? '안전교육' : 'TBM'}] 서명자 및 미서명자 현황
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                  앱 상시 SOS 버튼 클릭 시 관리자 웹 대시보드 경보음 및 위치 정보가 전송됩니다.
+                <p className="text-xs text-[#86868B] mt-0.5">
+                  {viewingSignaturesMaterial.title}
                 </p>
               </div>
-            </div>
-
-            <div className="space-y-3">
-              {sosList.map((sos) => (
-                <div
-                  key={sos.id}
-                  className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                    sos.status === 'TRIGGERED'
-                      ? 'bg-red-50 border-red-300 shadow-md shadow-red-500/10'
-                      : 'bg-white border-slate-200'
-                  }`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`badge ${
-                          sos.status === 'TRIGGERED' ? 'badge-red animate-pulse' : 'badge-green'
-                        }`}
-                      >
-                        {sos.status === 'TRIGGERED' ? '긴급 상황 진행 중' : '조치 완료'}
-                      </span>
-                      <span className="font-extrabold text-slate-900 text-sm">{sos.workerName}</span>
-                      <span className="font-mono text-xs text-slate-500">({sos.phoneNumber})</span>
-                    </div>
-                    <div className="text-xs text-red-700 font-bold">
-                      발생 구역: {sos.location}
-                    </div>
-                    <p className="text-xs text-slate-700 font-medium">{sos.message}</p>
-                    <div className="text-[11px] text-slate-400">
-                      호출 시각: {new Date(sos.triggeredAt).toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`tel:${sos.phoneNumber}`}
-                      className="btn-secondary text-xs"
-                    >
-                      근로자 전화 통화
-                    </a>
-                    {sos.status === 'TRIGGERED' ? (
-                      <button
-                        onClick={() => resolveSOS(sos.id)}
-                        className="btn-primary text-xs bg-emerald-600 hover:bg-emerald-500"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        상황 확인 및 조치 완료
-                      </button>
-                    ) : (
-                      <span className="text-xs text-emerald-700 font-bold">조치 종결됨</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          Modal: PDF Upload Modal (for Safety Education or TBM)
-          ========================================================================= */}
-      {isUploadModalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content p-6 space-y-4 max-w-lg">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Upload className="w-5 h-5 text-blue-600" />
-                {materialUploadType === 'SAFETY_EDUCATION'
-                  ? '신규 안전교육 PDF 교안 등록'
-                  : '신규 TBM(작업전안전점검) PDF 교안 등록'}
-              </h3>
               <button
-                onClick={() => setIsUploadModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700"
+                onClick={() => setViewingSignaturesMaterial(null)}
+                className="text-[#86868B] hover:text-[#1D1D1F]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleMaterialUploadSubmit} className="space-y-3.5 text-xs">
+            {/* Top Stat & Segmented Tabs */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 p-1 bg-[#F5F5F7] rounded-xl border border-black/5">
+                <button
+                  onClick={() => setSignatureModalTab('signed')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    signatureModalTab === 'signed'
+                      ? 'bg-white text-[#1D1D1F] shadow-sm'
+                      : 'text-[#6E6E73]'
+                  }`}
+                >
+                  서명 완료 근로자 ({viewingSignaturesMaterial.signatures.length}명)
+                </button>
+                <button
+                  onClick={() => setSignatureModalTab('unsigned')}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    signatureModalTab === 'unsigned'
+                      ? 'bg-white text-[#FF3B30] shadow-sm'
+                      : 'text-[#6E6E73]'
+                  }`}
+                >
+                  미서명(서명 미완료) 근로자 ({
+                    workers.filter(
+                      (w) =>
+                        w.status === 'ACTIVE' &&
+                        !viewingSignaturesMaterial.signatures.some((s) => s.workerId === w.id)
+                    ).length
+                  }명)
+                </button>
+              </div>
+
+              {/* Request #5: 엑셀 형태 다운로드 */}
+              <button
+                onClick={() => handleExportSignaturesExcel(viewingSignaturesMaterial)}
+                className="btn-primary text-xs py-2 px-3.5 bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>서명 내역 엑셀 다운로드 (CSV)</span>
+              </button>
+            </div>
+
+            {/* TAB CONTENT: Signed list vs Unsigned list */}
+            {signatureModalTab === 'signed' ? (
+              <div className="table-container max-h-72 overflow-y-auto">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>순번</th>
+                      <th>근로자 성명</th>
+                      <th>국적</th>
+                      <th>서명 완료 일시</th>
+                      <th>전자 서명 확인</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {viewingSignaturesMaterial.signatures.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-8 text-xs text-[#86868B]">
+                          아직 서명 완료한 근로자가 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      viewingSignaturesMaterial.signatures.map((sig, idx) => (
+                        <tr key={sig.id} className="hover:bg-[#F9FAFB]">
+                          <td className="font-mono text-xs">{idx + 1}</td>
+                          <td className="font-bold text-[#1D1D1F]">{sig.workerName}</td>
+                          <td>
+                            <span className="badge badge-blue text-[10px]">{sig.nationality}</span>
+                          </td>
+                          <td className="font-mono text-xs text-[#6E6E73]">{sig.signedAt}</td>
+                          <td>
+                            {sig.signatureDataUrl ? (
+                              <img
+                                src={sig.signatureDataUrl}
+                                alt="서명 이미지"
+                                className="h-7 border border-black/10 rounded bg-white px-2 object-contain"
+                              />
+                            ) : (
+                              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> 전자서명 완료
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="table-container max-h-72 overflow-y-auto">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>순번</th>
+                      <th>근로자 성명</th>
+                      <th>국적</th>
+                      <th>스마트폰 번호</th>
+                      <th>비자 형태</th>
+                      <th className="text-right">독촉 액션</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workers
+                      .filter(
+                        (w) =>
+                          w.status === 'ACTIVE' &&
+                          !viewingSignaturesMaterial.signatures.some((s) => s.workerId === w.id)
+                      )
+                      .map((w, idx) => (
+                        <tr key={w.id} className="hover:bg-[#F9FAFB]">
+                          <td className="font-mono text-xs">{idx + 1}</td>
+                          <td className="font-bold text-[#1D1D1F]">{w.name}</td>
+                          <td>
+                            <span className="badge badge-amber text-[10px]">{w.nationality}</span>
+                          </td>
+                          <td className="font-mono text-xs">{w.phoneNumber}</td>
+                          <td className="text-xs text-[#6E6E73]">{w.visaType}</td>
+                          <td className="text-right">
+                            <button
+                              onClick={() => {
+                                alert(`[서명 독촉 푸시 발송] ${w.name} 근로자 스마트폰으로 모국어 서명 독촉 알림이 전송되었습니다.`);
+                              }}
+                              className="btn-secondary text-xs py-1 px-2.5 text-[#0071E3] flex items-center gap-1 inline-flex"
+                            >
+                              <Bell className="w-3.5 h-3.5" />
+                              <span>서명 독촉 푸시</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-3 border-t border-black/5">
+              <button
+                onClick={() => setViewingSignaturesMaterial(null)}
+                className="btn-secondary text-xs"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Reading & Signature Pad (30% 커진 크기 max-w-[884px]) */}
+      {readingMaterial && (
+        <div className="modal-overlay">
+          <div className="modal-content p-8 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-black/5">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  교안 제목 *
+                <h3 className="text-lg font-bold text-[#1D1D1F] flex items-center gap-2">
+                  <FileSignature className="w-5 h-5 text-[#0071E3]" />
+                  교안 열람 및 안전 서약 전자서명
+                </h3>
+                <p className="text-xs text-[#86868B] mt-0.5">{readingMaterial.title}</p>
+              </div>
+              <button
+                onClick={() => setReadingMaterial(null)}
+                className="text-[#86868B] hover:text-[#1D1D1F]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-[#F5F5F7] rounded-2xl space-y-2 text-xs text-[#1D1D1F] leading-relaxed">
+              <span className="font-bold block text-sm">안전수칙 주요 이수 내용:</span>
+              <p>1. 모든 작업자는 안전모 턱끈 체결 및 안전화 착용을 철저히 확인합니다.</p>
+              <p>2. 유해 화학물질 취급 시 내화학 장갑, 방독마스크, 보안경을 착용합니다.</p>
+              <p>3. 위험 설비 점검 전 반드시 메인 전원을 차단하고 LOTO(잠금장치)를 시건합니다.</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <label className="font-bold text-[#1D1D1F]">서명 대상 근로자 선택:</label>
+                  <select
+                    value={signingWorkerId}
+                    onChange={(e) => setSigningWorkerId(e.target.value)}
+                    className="bg-[#F5F5F7] border border-black/5 rounded-lg px-3 py-1.5 text-xs text-[#1D1D1F]"
+                  >
+                    {workers.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.nationality})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearCanvas}
+                  className="text-xs text-[#FF3B30] hover:underline"
+                >
+                  서명 다시 쓰기
+                </button>
+              </div>
+
+              <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 overflow-hidden shadow-inner">
+                <canvas
+                  ref={canvasRef}
+                  width={800}
+                  height={160}
+                  onMouseDown={startDrawing}
+                  onMouseMove={draw}
+                  onMouseUp={stopDrawing}
+                  onTouchStart={startDrawing}
+                  onTouchMove={draw}
+                  onTouchEnd={stopDrawing}
+                  className="w-full h-36 cursor-crosshair touch-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-black/5">
+              <button
+                type="button"
+                onClick={() => setReadingMaterial(null)}
+                className="btn-secondary text-xs"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleCompleteMaterialSignature}
+                disabled={!hasSigned}
+                className="btn-primary text-xs disabled:opacity-50"
+              >
+                서명 완료 및 보관
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: Add Equipment Usage Tab (Request #7: 동적 탭 생성) */}
+      {isAddEquipmentTypeModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content p-8 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-black/5">
+              <h3 className="text-lg font-bold text-[#1D1D1F] flex items-center gap-2">
+                <Truck className="w-5 h-5 text-[#0071E3]" />
+                신규 기기 사용 일지 탭 생성
+              </h3>
+              <button
+                onClick={() => setIsAddEquipmentTypeModalOpen(false)}
+                className="text-[#86868B] hover:text-[#1D1D1F]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddEquipmentTypeSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">
+                  생성할 기기/장비 명칭 *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder={
-                    materialUploadType === 'SAFETY_EDUCATION'
-                      ? '예: 2026 하반기 유해화학물질 취급 안전교육'
-                      : '예: A동 고소 용접작업 전 TBM 교안'
-                  }
-                  value={newMaterialForm.title}
-                  onChange={(e) => setNewMaterialForm({ ...newMaterialForm, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:bg-white focus:border-blue-500"
+                  placeholder="예: 굴착기, 호이스트, 덤프트럭 등"
+                  value={newEquipmentTypeName}
+                  onChange={(e) => setNewEquipmentTypeName(e.target.value)}
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F] focus:bg-white focus:border-[#0071E3]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-blue-50/70 border border-blue-200/60 rounded-xl text-xs text-blue-900 leading-relaxed">
+                💡 탭이 생성되면 안전보건관리 메뉴 상단에 기기별 일지 탭이 추가되며, 근로자 스마트폰에서도 해당 기기를 선택하여 사용 승인 요청을 할 수 있습니다.
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-black/5">
+                <button
+                  type="button"
+                  onClick={() => setIsAddEquipmentTypeModalOpen(false)}
+                  className="btn-secondary text-xs"
+                >
+                  취소
+                </button>
+                <button type="submit" className="btn-primary text-xs">
+                  기기 사용일지 탭 생성
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Upload Material Modal */}
+      {isUploadModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content p-8 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-black/5">
+              <h3 className="text-lg font-bold text-[#1D1D1F] flex items-center gap-2">
+                <Upload className="w-5 h-5 text-[#0071E3]" />
+                {materialUploadType === 'SAFETY_EDUCATION' ? '신규 안전교육 PDF 교안 등록' : '신규 TBM PDF 교안 등록'}
+              </h3>
+              <button
+                onClick={() => setIsUploadModalOpen(false)}
+                className="text-[#86868B] hover:text-[#1D1D1F]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleMaterialUploadSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">교안 제목 *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="예: 2026년 하반기 유해화학물질 취급 안전 특별교육"
+                  value={newMaterialForm.title}
+                  onChange={(e) => setNewMaterialForm({ ...newMaterialForm, title: e.target.value })}
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    교육/작업 분류
-                  </label>
+                  <label className="text-[#1D1D1F] font-semibold block mb-1">교육 구분</label>
                   <input
                     type="text"
                     value={newMaterialForm.category}
                     onChange={(e) => setNewMaterialForm({ ...newMaterialForm, category: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800"
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-[#1D1D1F]"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    대상 공정/부서
-                  </label>
+                  <label className="text-[#1D1D1F] font-semibold block mb-1">대상 부서/라인</label>
                   <input
                     type="text"
                     value={newMaterialForm.targetDepartment}
                     onChange={(e) => setNewMaterialForm({ ...newMaterialForm, targetDepartment: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800"
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-[#1D1D1F]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  PDF 교안 파일 첨부 (PDF 업로드 지원) *
-                </label>
-                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer">
-                  <FileText className="w-8 h-8 text-red-500 mx-auto mb-1.5" />
-                  <div className="font-semibold text-slate-800">
-                    {newMaterialForm.fileName} ({newMaterialForm.fileSize})
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    클릭하여 다른 PDF 교안 파일 선택 (최대 50MB)
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  교안 내용 요약 및 서명 지침
-                </label>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">교안 상세 설명</label>
                 <textarea
                   rows={2}
                   value={newMaterialForm.description}
                   onChange={(e) => setNewMaterialForm({ ...newMaterialForm, description: e.target.value })}
-                  placeholder="작업자가 반드시 숙지해야 할 핵심 안전 수칙 요약"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800 focus:bg-white"
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F]"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-black/5">
                 <button
                   type="button"
                   onClick={() => setIsUploadModalOpen(false)}
@@ -1022,308 +1267,13 @@ export const SafetyHealthView: React.FC = () => {
                   취소
                 </button>
                 <button type="submit" className="btn-primary text-xs">
-                  PDF 교안 등록 완료
+                  교안 등록 저장
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          Modal: PDF Reading & Digital Signature Modal (Worker Reads PDF and Signs)
-          ========================================================================= */}
-      {readingMaterial && (
-        <div className="modal-overlay">
-          <div className="modal-content p-6 space-y-4 max-w-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600" />
-                <h3 className="text-base font-extrabold text-slate-900">
-                  {readingMaterial.title}
-                </h3>
-              </div>
-              <button
-                onClick={() => setReadingMaterial(null)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Simulated PDF Viewer Document */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3 max-h-72 overflow-y-auto shadow-inner text-xs text-slate-800 leading-relaxed font-sans">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-200 text-slate-500 font-mono text-[11px]">
-                <span>📄 [PDF 문서 뷰어] {readingMaterial.fileName}</span>
-                <span>공식 안전지침서 (산업안전보건공단 표준)</span>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-2">
-                <h4 className="font-extrabold text-sm text-slate-900">
-                  【필수 준수 안전수칙 및 위험 예방 절차】
-                </h4>
-                <p>1. 모든 근로자는 작업 전 안전모 턱끈을 조이고 적격 보호구를 착용해야 합니다.</p>
-                <p>2. 화기 및 배관 작업 시 작업 반경 5m 이내 소화설비 배치 및 환기 조치를 확인합니다.</p>
-                <p>3. 이상 징후 또는 가스 누출 의심 시 즉시 작업을 중단하고 관리자에게 보고 후 대피합니다.</p>
-                <p>4. 본 교안을 충분히 숙지하였으며, 위 안전수칙을 철저히 이행할 것을 서약합니다.</p>
-              </div>
-
-              <div className="text-[11px] text-blue-600 font-semibold text-center">
-                위 교안의 내용을 모두 확인하였으며, 아래에 본인 성명 서명을 진행합니다.
-              </div>
-            </div>
-
-            {/* Signature Area */}
-            <div className="space-y-3 pt-1">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-700">서명 대상 근로자:</span>
-                  <select
-                    value={signingWorkerId}
-                    onChange={(e) => setSigningWorkerId(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 font-bold"
-                  >
-                    {workers.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} ({w.koreanName || w.nationality})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-[11px]">마우스 또는 터치 서명:</span>
-                  <button
-                    type="button"
-                    onClick={clearCanvas}
-                    className="text-red-500 hover:underline text-xs font-semibold"
-                  >
-                    서명 지우기
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl border-2 border-dashed border-slate-300 overflow-hidden touch-none shadow-inner">
-                <canvas
-                  ref={canvasRef}
-                  width={580}
-                  height={130}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
-                  className="w-full h-[130px] cursor-crosshair"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => setReadingMaterial(null)}
-                className="btn-secondary text-xs"
-              >
-                닫기
-              </button>
-              <button
-                type="button"
-                onClick={handleCompleteMaterialSignature}
-                disabled={!hasSigned}
-                className={`btn-primary text-xs bg-emerald-600 hover:bg-emerald-500 ${
-                  !hasSigned ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                교안 열람 및 전자서명 확인 제출
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          Modal: Signatures View Modal (List of who signed this material)
-          ========================================================================= */}
-      {viewingSignaturesMaterial && (
-        <div className="modal-overlay">
-          <div className="modal-content p-6 space-y-4 max-w-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-blue-600" />
-                  교안 서명 확인 완료자 명부
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">{viewingSignaturesMaterial.title}</p>
-              </div>
-              <button
-                onClick={() => setViewingSignaturesMaterial(null)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
-              {viewingSignaturesMaterial.signatures.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs font-medium">
-                  아직 서명 완료된 근로자가 없습니다.
-                </div>
-              ) : (
-                viewingSignaturesMaterial.signatures.map((sig) => (
-                  <div key={sig.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                        <span>{sig.workerName}</span>
-                        <span className="badge badge-purple text-[10px]">{sig.nationality}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
-                        서명 일시: {sig.signedAt}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {sig.signatureDataUrl ? (
-                        <img
-                          src={sig.signatureDataUrl}
-                          alt="서명"
-                          className="h-9 bg-slate-50 rounded border border-slate-200 px-2"
-                        />
-                      ) : (
-                        <div className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-mono font-bold rounded border border-emerald-200">
-                          VERIFIED ✍️
-                        </div>
-                      )}
-                      <span className="badge badge-green text-[10px]">확인 완료</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-slate-200 text-xs">
-              <span className="text-slate-500 font-medium">
-                총 {viewingSignaturesMaterial.signatures.length}명 서명 완료 보관 중
-              </span>
-              <button
-                onClick={() => setViewingSignaturesMaterial(null)}
-                className="btn-secondary text-xs"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          Modal: Push History Edit Modal (Item #10)
-          ========================================================================= */}
-      {editingPush && (
-        <div className="modal-overlay">
-          <div className="modal-content p-6 space-y-4 max-w-md">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-blue-600" />
-                푸시 알림 발송 이력 수정
-              </h3>
-              <button
-                onClick={() => setEditingPush(null)}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditPush} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  발송 일시
-                </label>
-                <input
-                  type="text"
-                  value={editingPush.sentAt}
-                  onChange={(e) => setEditingPush({ ...editingPush, sentAt: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  수신 대상
-                </label>
-                <input
-                  type="text"
-                  value={editingPush.target}
-                  onChange={(e) => setEditingPush({ ...editingPush, target: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">
-                  지시 사항 내용
-                </label>
-                <textarea
-                  rows={3}
-                  value={editingPush.instructionText}
-                  onChange={(e) => setEditingPush({ ...editingPush, instructionText: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-800"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setEditingPush(null)}
-                  className="btn-secondary text-xs"
-                >
-                  취소
-                </button>
-                <button type="submit" className="btn-primary text-xs">
-                  수정 사항 저장
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Reject PTW Reason Modal */}
-      {rejectingPtwId && (
-        <div className="modal-overlay">
-          <div className="modal-content p-6 space-y-4">
-            <h3 className="font-bold text-slate-900 text-base text-red-600">
-              안전작업허가서(PTW) 반려 사유 입력
-            </h3>
-            <p className="text-xs text-slate-600">
-              작업자에게 전달될 반려 사유와 안전 보완 조치를 입력해주세요.
-            </p>
-            <textarea
-              rows={3}
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800"
-            />
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setRejectingPtwId(null)}
-                className="btn-secondary text-xs"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleConfirmReject}
-                className="btn-danger text-xs"
-              >
-                반려 처리 확정
-              </button>
-            </div>
           </div>
         </div>
       )}
     </div>
   );
 };
-

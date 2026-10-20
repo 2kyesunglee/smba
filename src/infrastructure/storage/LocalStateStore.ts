@@ -6,6 +6,7 @@ import { EquipmentQR } from '@/domain/entities/EquipmentQR';
 import { Template } from '@/domain/entities/Template';
 import { Signature } from '@/domain/entities/Signature';
 import { WorkReport } from '@/domain/entities/WorkReport';
+import { EquipmentUsageLog } from '@/domain/entities/EquipmentUsageLog';
 
 export interface DocumentItem {
   id: string;
@@ -17,9 +18,19 @@ export interface DocumentItem {
   uploadedAt: string;
 }
 
+export interface InspectionTarget {
+  id: string;
+  name: string;
+  location: string;
+  cycle: string; // '일일' | '주간' | '월간'
+  metrics: { name: string; unit: string; maxLimit?: number; minLimit?: number }[];
+  manager: string;
+  description?: string;
+}
+
 export interface AppNotification {
   id: string;
-  type: 'SOS' | 'PTW' | 'INSPECTION' | 'VISA' | 'TASK';
+  type: 'SOS' | 'PTW' | 'INSPECTION' | 'VISA' | 'TASK' | 'EQUIPMENT_USAGE';
   title: string;
   message: string;
   timestamp: string;
@@ -73,6 +84,9 @@ export interface StoreState {
   notifications: AppNotification[];
   safetyMaterials: SafetyMaterial[];
   pushHistories: PushHistoryItem[];
+  equipmentUsageLogs: EquipmentUsageLog[];
+  equipmentTypes: string[];
+  inspectionTargets: InspectionTarget[];
   currentRole: 'admin' | 'worker';
   activeWorkerId: string;
   currentLanguage: string;
@@ -551,6 +565,96 @@ const INITIAL_DOCUMENTS: DocumentItem[] = [
   },
 ];
 
+const INITIAL_EQUIPMENT_TYPES: string[] = ['지게차', '고소작업대', '스카이', '크레인'];
+
+const INITIAL_EQUIPMENT_USAGE_LOGS: EquipmentUsageLog[] = [
+  EquipmentUsageLog.create({
+    id: 'eq-log-1',
+    equipmentType: '지게차',
+    equipmentNumber: 'FL-01 (3.5톤)',
+    workerId: 'w-1',
+    workerName: 'Nguyen Van An',
+    purpose: 'A동 원자재 입고 하역 및 원료 창고 파렛트 적재 작업',
+    startTime: '2026-10-20 09:00',
+    endTime: '2026-10-20 12:00',
+    location: 'A동 야적장 및 1층 원료창고',
+    hasLicense: true,
+    preCheckCompleted: true,
+    status: 'REQUESTED',
+  }),
+  EquipmentUsageLog.create({
+    id: 'eq-log-2',
+    equipmentType: '고소작업대',
+    equipmentNumber: 'AWP-03 (10m 시저스형)',
+    workerId: 'w-2',
+    workerName: 'Batbayar Bold',
+    purpose: 'B동 보일러실 천장 조명 교체 및 덕트 배관 점검',
+    startTime: '2026-10-19 14:00',
+    endTime: '2026-10-19 17:00',
+    location: 'B동 보일러실 2구역',
+    hasLicense: true,
+    preCheckCompleted: true,
+    status: 'APPROVED',
+    approvedBy: '김공장장 (안전관리자)',
+    approvedAt: '2026-10-19 13:40',
+  }),
+  EquipmentUsageLog.create({
+    id: 'eq-log-3',
+    equipmentType: '크레인',
+    equipmentNumber: 'CR-02 (천장크레인 5톤)',
+    workerId: 'w-kr-1',
+    workerName: '김한국',
+    purpose: 'C동 슬러지 압착기 모터 중량물 인양 정비',
+    startTime: '2026-10-18 10:00',
+    endTime: '2026-10-18 11:30',
+    location: 'C동 환경정화동',
+    hasLicense: true,
+    preCheckCompleted: true,
+    status: 'APPROVED',
+    approvedBy: '김공장장 (안전관리자)',
+    approvedAt: '2026-10-18 09:50',
+  }),
+];
+
+const INITIAL_INSPECTION_TARGETS: InspectionTarget[] = [
+  {
+    id: 'target-1',
+    name: 'A동 렌더링 쿠커 #1',
+    location: 'A동 가공구역 1층',
+    cycle: '일일',
+    manager: '김한국 (정비반장)',
+    description: '고온·고압 증기 렌더링 반응기 (최대 130°C 초과 시 비상)',
+    metrics: [
+      { name: '내부 가열 온도', unit: '°C', maxLimit: 130 },
+      { name: '증기 공급 압력', unit: 'bar', maxLimit: 3.5, minLimit: 1.0 },
+    ],
+  },
+  {
+    id: 'target-2',
+    name: 'B동 고압 보일러 주증기 배관',
+    location: 'B동 보일러실',
+    cycle: '일일',
+    manager: 'Nguyen Van An',
+    description: '보일러 증기 공급 메인 배관 및 안전밸브 누설 검사',
+    metrics: [
+      { name: '증기 압력', unit: 'bar', maxLimit: 4.0 },
+      { name: '표면 온도', unit: '°C', maxLimit: 90 },
+    ],
+  },
+  {
+    id: 'target-3',
+    name: 'C동 폐수 슬러지 탈수 압착기',
+    location: 'C동 환경정화동',
+    cycle: '일일',
+    manager: 'Batbayar Bold',
+    description: '롤러 협착 방지 인터록 및 구동축 진동 점검',
+    metrics: [
+      { name: '공급 압력', unit: 'bar', maxLimit: 3.0 },
+      { name: '모터 진동치', unit: 'mm/s', maxLimit: 4.5 },
+    ],
+  },
+];
+
 export class LocalStateStore {
   private static instance: LocalStateStore;
   private state: StoreState;
@@ -569,6 +673,9 @@ export class LocalStateStore {
       documents: INITIAL_DOCUMENTS,
       safetyMaterials: INITIAL_MATERIALS,
       pushHistories: INITIAL_PUSH_HISTORIES,
+      equipmentUsageLogs: INITIAL_EQUIPMENT_USAGE_LOGS,
+      equipmentTypes: INITIAL_EQUIPMENT_TYPES,
+      inspectionTargets: INITIAL_INSPECTION_TARGETS,
       notifications: [
         {
           id: 'notif-1',
@@ -803,6 +910,73 @@ export class LocalStateStore {
 
   public deletePushHistory(id: string) {
     this.state.pushHistories = this.state.pushHistories.filter((h) => h.id !== id);
+    this.notify();
+  }
+
+  // Equipment Usage Log Methods (Request #7)
+  public requestEquipmentUsage(log: EquipmentUsageLog) {
+    this.state.equipmentUsageLogs = [log, ...this.state.equipmentUsageLogs];
+    this.state.notifications = [
+      {
+        id: 'notif-' + Date.now(),
+        type: 'EQUIPMENT_USAGE',
+        title: `기기 사용 승인 요청 (${log.equipmentType})`,
+        message: `${log.workerName} 근로자가 ${log.equipmentType} 사용을 요청했습니다. (${log.purpose})`,
+        timestamp: '방금 전',
+        isRead: false,
+        priority: 'HIGH',
+      },
+      ...this.state.notifications,
+    ];
+    this.notify();
+  }
+
+  public approveEquipmentUsage(id: string, adminName: string = '김공장장 (안전관리자)') {
+    this.state.equipmentUsageLogs = this.state.equipmentUsageLogs.map((item) => {
+      if (item.id === id) {
+        item.approve(adminName);
+      }
+      return item;
+    });
+    this.notify();
+  }
+
+  public rejectEquipmentUsage(id: string, reason: string, adminName: string = '김공장장 (안전관리자)') {
+    this.state.equipmentUsageLogs = this.state.equipmentUsageLogs.map((item) => {
+      if (item.id === id) {
+        item.reject(reason, adminName);
+      }
+      return item;
+    });
+    this.notify();
+  }
+
+  public addEquipmentType(type: string) {
+    if (!this.state.equipmentTypes.includes(type)) {
+      this.state.equipmentTypes = [...this.state.equipmentTypes, type];
+      this.notify();
+    }
+  }
+
+  // Inspection Targets Management (Request #6)
+  public addInspectionTarget(target: InspectionTarget) {
+    this.state.inspectionTargets = [target, ...this.state.inspectionTargets];
+    this.notify();
+  }
+
+  public deleteInspectionTarget(id: string) {
+    this.state.inspectionTargets = this.state.inspectionTargets.filter((t) => t.id !== id);
+    this.notify();
+  }
+
+  // Document Management (Request #9)
+  public addDocument(doc: DocumentItem) {
+    this.state.documents = [doc, ...this.state.documents];
+    this.notify();
+  }
+
+  public deleteDocument(id: string) {
+    this.state.documents = this.state.documents.filter((d) => d.id !== id);
     this.notify();
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
 import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
 import {
@@ -20,6 +20,13 @@ import {
   ArrowRight,
   ClipboardList,
   Upload,
+  User,
+  KeyRound,
+  Truck,
+  Check,
+  Clock,
+  LogOut,
+  Calendar,
 } from 'lucide-react';
 
 interface WorkerMobileSimulatorProps {
@@ -39,21 +46,41 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     submitWorkReport,
     equipmentList,
     ptwList,
+    equipmentUsageLogs,
+    equipmentTypes,
+    inspectionTargets,
+    requestEquipmentUsage,
+    addWorker,
   } = useAppStore();
 
   const translationService = new MultiLanguageTranslationService();
 
+  // Login / Auth State (Request #2)
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isSignUpView, setIsSignUpView] = useState(false);
+  const [loginPhone, setLoginPhone] = useState('010-3456-7890');
+  const [loginPassword, setLoginPassword] = useState('1234');
+  const [signUpForm, setSignUpForm] = useState({
+    name: '',
+    nationality: 'VN',
+    phoneNumber: '',
+    password: '',
+  });
+
   // Current worker & language
   const currentWorker = workers.find((w) => w.id === activeWorkerId) || workers[0];
   const [selectedLang, setSelectedLang] = useState<string>(
-    currentWorker.nationality.toLowerCase() === 'vn'
-      ? 'vi'
-      : currentWorker.nationality.toLowerCase() === 'mn'
-      ? 'mn'
-      : 'vi'
+    translationService.detectLanguageByNationality(currentWorker?.nationality || 'VN')
   );
 
-  const [activeTab, setActiveTab] = useState<'home' | 'tbm' | 'ptw' | 'qr' | 'inspect' | 'report'>('home');
+  // Sync language automatically when worker changes (Request #3)
+  useEffect(() => {
+    if (currentWorker) {
+      setSelectedLang(translationService.detectLanguageByNationality(currentWorker.nationality));
+    }
+  }, [currentWorker?.id, currentWorker?.nationality]);
+
+  const [activeTab, setActiveTab] = useState<'home' | 'tbm' | 'ptw' | 'equipment_use' | 'inspect' | 'report' | 'qr'>('home');
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -68,28 +95,97 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     safetyMeasures: '안전대 2개소 체결, 가스측정기 휴대, 소화기 배치',
   });
 
-  // Inspection Form State
+  // Inspection Form State (Synced with Admin Inspection Targets)
+  const [selectedInspectTarget, setSelectedInspectTarget] = useState<string>(inspectionTargets[0]?.id || 'target-1');
   const [inspectData, setInspectData] = useState({
-    temperature: 132, // intentionally triggers abnormal if above 130
+    temperature: 132, // triggers abnormal if > 130
     pressure: 2.5,
     steam_leak: '정상',
   });
 
-  // Before/After Form State (2 Before + 2 After Photos)
+  // Equipment Usage Request State (Request #7: 지게차, 고소작업대 등)
+  const [equipmentUseForm, setEquipmentUseForm] = useState({
+    equipmentType: equipmentTypes[0] || '지게차',
+    equipmentNumber: '1호기',
+    purpose: 'A동 원자재 하역 및 파렛트 이송',
+    startTime: '2026-10-20 09:00',
+    endTime: '2026-10-20 12:00',
+    location: 'A동 야적장',
+    hasLicense: true,
+    preCheckCompleted: true,
+  });
+
+  // Before/After Form State (Request #4: 자동기입 및 문제점/개선이후 설명)
   const [reportForm, setReportForm] = useState({
     taskName: '보일러실 배관 보온재 교체 및 청소',
-    location: 'B동 보일러실',
+    workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || ''})` : '작업자',
+    workDate: '',
+    location: 'B동 보일러실 2구역',
     beforeImg1: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
     beforeImg2: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
     afterImg1: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
     afterImg2: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-    description: '노후 보온재 제거 후 난연성 글라스울 재시공 완료함.',
+    beforeDescription: '노후 보온재 탈락으로 인한 열 손실 및 작업자 접촉 화상 위험 발생.',
+    afterDescription: '고효율 난연성 글라스울 재시공 및 외장 알루미늄 커버 체결 완료.',
+    description: '보온재 교체 작업 완료함.',
   });
+
+  // Update auto-filled worker name and date when worker changes or on mount
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setReportForm((prev) => ({
+      ...prev,
+      workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || currentWorker.nationality})` : prev.workerName,
+      workDate: today,
+    }));
+  }, [currentWorker?.id]);
 
   // Scanned QR result
   const [scannedEquipment, setScannedEquipment] = useState<any | null>(null);
 
   if (!isOpen) return null;
+
+  // Login handler
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const matched = workers.find((w) => w.phoneNumber === loginPhone);
+    if (!matched) {
+      alert('등록되지 않은 전화번호입니다. 먼저 회원가입 및 승인 요청을 진행해주세요.');
+      return;
+    }
+    if (matched.status === 'PENDING_APPROVAL') {
+      alert('현재 관리자의 앱 연동 승인 대기 중입니다. 관리자 웹에서 인사기록카드 등록 및 승인 후 로그인할 수 있습니다.');
+      return;
+    }
+    setActiveWorker(matched.id);
+    setIsLoggedIn(true);
+    alert(`[로그인 성공] ${matched.name}님 환영합니다. 모국어(${matched.nationality})로 자동 전환됩니다.`);
+  };
+
+  // Sign up handler (Request #2)
+  const handleSignUpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signUpForm.name || !signUpForm.phoneNumber || !signUpForm.password) {
+      alert('이름, 국적, 핸드폰 번호, 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    addWorker({
+      name: signUpForm.name,
+      nationality: signUpForm.nationality,
+      phoneNumber: signUpForm.phoneNumber,
+      password: signUpForm.password,
+      status: 'PENDING_APPROVAL',
+      contractStartDate: new Date().toISOString().split('T')[0],
+      contractEndDate: '2027-12-31',
+    });
+
+    alert(
+      '🎉 [회원가입 승인 요청 완료]\n\n관리자 웹의 "앱 연동 승인 대기열"로 정보가 전송되었습니다.\n관리자가 주민번호, 비자, 건강검진 등 인사기록카드를 확인 및 승인하면 계정이 활성화됩니다.'
+    );
+    setIsSignUpView(false);
+    setLoginPhone(signUpForm.phoneNumber);
+  };
 
   // Canvas Drawing Handlers
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -107,7 +203,7 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     ctx.moveTo(x, y);
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
-    ctx.strokeStyle = '#1E3A8A';
+    ctx.strokeStyle = '#0071E3';
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
@@ -167,15 +263,48 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
 
   const handleInspectionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const target = inspectionTargets.find((t) => t.id === selectedInspectTarget) || inspectionTargets[0];
     const isAbnormal = inspectData.temperature > 130;
     const notes = isAbnormal ? `온도 기준치 초과 (${inspectData.temperature}°C > 130°C)` : '정상';
-    submitInspection('eq-1', 'A동 렌더링 쿠커 #1', inspectData, isAbnormal, notes);
+    submitInspection(target?.id || 'eq-1', target?.name || '설비', inspectData, isAbnormal, notes);
     alert(
       isAbnormal
         ? `⚠️ [주의] 온도가 기준치(130°C)를 초과하여 관리자 웹에 경고가 즉시 전송되었습니다.`
-        : '설비 점검 데이터가 정상 등록되었습니다.'
+        : `[${target?.name}] 설비 점검 데이터가 정상 등록되어 관리자 웹에 실시간 반영되었습니다.`
     );
     setActiveTab('home');
+  };
+
+  const handleEquipmentUseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    requestEquipmentUsage({
+      equipmentType: equipmentUseForm.equipmentType,
+      equipmentNumber: equipmentUseForm.equipmentNumber,
+      purpose: equipmentUseForm.purpose,
+      startTime: equipmentUseForm.startTime,
+      endTime: equipmentUseForm.endTime,
+      location: equipmentUseForm.location,
+      hasLicense: equipmentUseForm.hasLicense,
+      preCheckCompleted: equipmentUseForm.preCheckCompleted,
+    });
+    alert(`[${equipmentUseForm.equipmentType}] 사용 승인 요청이 관리자 웹으로 전송되었습니다.`);
+  };
+
+  // Image Upload helper
+  const handlePhotoUpload = (field: 'beforeImg1' | 'beforeImg2' | 'afterImg1' | 'afterImg2', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setReportForm((prev) => ({
+            ...prev,
+            [field]: event.target?.result as string,
+          }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleReportSubmit = (e: React.FormEvent) => {
@@ -187,35 +316,37 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
       reportForm.afterImg1,
       reportForm.description,
       [reportForm.beforeImg1, reportForm.beforeImg2],
-      [reportForm.afterImg1, reportForm.afterImg2]
+      [reportForm.afterImg1, reportForm.afterImg2],
+      reportForm.beforeDescription,
+      reportForm.afterDescription
     );
-    alert('Before & After 작업 완료 보고서 (전 2장 + 후 2장)가 관리자 갤러리로 전송되었습니다.');
+    alert('Before & After 작업 완료 보고서 (문제점 & 개선이후 설명 포함)가 관리자 갤러리로 전송되었습니다.');
     setActiveTab('home');
   };
 
   return (
     <div className="modal-overlay">
-      <div className="relative flex flex-col items-center max-w-sm w-full mx-auto">
+      <div className="relative flex flex-col items-center max-w-sm w-full mx-auto animate-fadeIn">
         {/* Close Button Floating */}
         <button
           onClick={onClose}
-          className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white bg-black/50 rounded-full border border-white/20"
+          className="absolute -top-12 right-0 p-2 text-white/90 hover:text-white bg-black/60 rounded-full border border-white/20 transition-all hover:scale-105"
         >
-          <X className="w-6 h-6" />
+          <X className="w-5 h-5" />
         </button>
 
-        {/* Worker & Language Top Selector Bar */}
-        <div className="w-full bg-[#1F2937] p-2.5 rounded-t-2xl border border-white/10 flex items-center justify-between text-xs text-white">
-          <div className="flex items-center gap-1.5">
-            <span className="text-gray-400">근로자:</span>
+        {/* Worker & Language Top Selector Bar (Apple Style Clean Bar) */}
+        <div className="w-full bg-[#1C1C1E] p-3 rounded-t-3xl border border-white/10 flex items-center justify-between text-xs text-white">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400 font-medium">근로자:</span>
             <select
               value={activeWorkerId}
               onChange={(e) => setActiveWorker(e.target.value)}
-              className="bg-black/40 border border-white/10 rounded px-2 py-0.5 text-xs text-white"
+              className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
             >
               {workers.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name} ({w.nationality})
+                <option key={w.id} value={w.id} className="bg-gray-900 text-white">
+                  {w.name} ({w.nationality}) - {w.status === 'PENDING_APPROVAL' ? '승인대기' : '활성'}
                 </option>
               ))}
             </select>
@@ -226,10 +357,10 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
             <select
               value={selectedLang}
               onChange={(e) => setSelectedLang(e.target.value)}
-              className="bg-black/40 border border-white/10 rounded px-2 py-0.5 text-xs text-white"
+              className="bg-black/50 border border-white/15 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
             >
               {SUPPORTED_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code}>
+                <option key={l.code} value={l.code} className="bg-gray-900 text-white">
                   {l.flag} {l.nativeName}
                 </option>
               ))}
@@ -237,464 +368,879 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
           </div>
         </div>
 
-        {/* Mobile Phone Mockup Body */}
-        <div className="w-full h-[680px] bg-[#0A0E17] border-4 border-gray-700 rounded-b-3xl shadow-2xl overflow-hidden flex flex-col justify-between relative text-white">
+        {/* Mobile Phone Mockup Body (Apple iPhone Style) */}
+        <div className="w-full h-[710px] bg-[#000000] border-4 border-[#2C2C2E] rounded-b-3xl shadow-2xl overflow-hidden flex flex-col justify-between relative text-white">
           {/* Mobile Top Status Bar */}
-          <div className="h-6 bg-black px-4 flex items-center justify-between text-[10px] text-gray-400 font-mono">
-            <span>09:41</span>
-            <div className="w-14 h-3 bg-gray-800 rounded-full"></div>
-            <div className="flex items-center gap-1">
+          <div className="h-7 bg-black px-6 flex items-center justify-between text-[11px] text-gray-400 font-mono select-none">
+            <span className="font-semibold text-white">09:41</span>
+            {/* Dynamic Island Pill */}
+            <div className="w-20 h-4 bg-[#1C1C1E] rounded-full flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full bg-blue-500/80 mr-1.5"></div>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/80"></div>
+            </div>
+            <div className="flex items-center gap-1.5">
               <span>5G</span>
-              <span>100%</span>
+              <div className="w-5 h-2.5 border border-gray-400 rounded-sm p-0.5 flex items-center">
+                <div className="w-full h-full bg-white rounded-2xs"></div>
+              </div>
             </div>
           </div>
 
-          {/* Floating SOS Button (PRD: 상시 노출 비상버튼) */}
-          <button
-            onClick={handleTriggerSOS}
-            className="absolute bottom-16 right-4 z-30 w-14 h-14 rounded-full bg-gradient-to-tr from-red-600 to-rose-500 text-white font-black text-sm shadow-2xl shadow-red-500/50 flex flex-col items-center justify-center border-2 border-white/40 active:scale-90 transition-transform beacon-pulse"
-            title="비상 상황 시 즉시 누르세요"
-          >
-            <Radio className="w-4 h-4 animate-ping" />
-            <span className="text-[10px] tracking-tighter">SOS</span>
-          </button>
+          {/* Floating SOS Button */}
+          {isLoggedIn && (
+            <button
+              onClick={handleTriggerSOS}
+              className="absolute bottom-16 right-4 z-30 w-14 h-14 rounded-full bg-gradient-to-tr from-[#FF3B30] to-[#FF453A] text-white font-black text-sm shadow-2xl shadow-red-500/50 flex flex-col items-center justify-center border-2 border-white/40 active:scale-90 transition-transform beacon-pulse"
+              title="비상 상황 시 즉시 누르세요"
+            >
+              <Radio className="w-4 h-4 animate-ping" />
+              <span className="text-[10px] tracking-tight">SOS</span>
+            </button>
+          )}
 
           {/* Mobile App Header */}
-          <div className="bg-[#111827] px-4 py-2.5 border-b border-white/10 flex items-center justify-between">
+          <div className="bg-[#1C1C1E] px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-blue-400" />
+              <div className="w-7 h-7 rounded-lg bg-[#0071E3] flex items-center justify-center text-white shadow-md">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
               <div>
-                <div className="text-xs font-bold leading-tight">SafeGuard Mobile</div>
+                <div className="text-xs font-bold leading-tight">SafeGuard AI Mobile</div>
                 <div className="text-[10px] text-gray-400">
-                  {currentWorker.name} ({currentWorker.visaType})
+                  {isLoggedIn ? `${currentWorker.name} (${currentWorker.nationality})` : '근로자 인증'}
                 </div>
               </div>
             </div>
 
-            <span className="badge badge-green text-[10px]">계정 연동됨</span>
+            {isLoggedIn ? (
+              <div className="flex items-center gap-2">
+                <span className={`badge text-[9px] ${currentWorker.status === 'ACTIVE' ? 'badge-green' : 'badge-amber'}`}>
+                  {currentWorker.status === 'ACTIVE' ? '인증완료' : '승인대기'}
+                </span>
+                <button
+                  onClick={() => setIsLoggedIn(false)}
+                  className="p-1 hover:text-white text-gray-400 text-[10px]"
+                  title="로그아웃"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <span className="badge badge-blue text-[10px]">로그인 필요</span>
+            )}
           </div>
 
           {/* Main App Content Area */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
-            {/* Tab: Home */}
-            {activeTab === 'home' && (
-              <div className="space-y-3">
-                {/* Safety Warning Card */}
-                <div className="p-3 bg-gradient-to-r from-blue-950 to-indigo-950 border border-blue-500/30 rounded-xl space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] text-blue-300 font-bold">
-                    <span>
-                      {translationService.getLanguageInfo(selectedLang).flag} 오늘의 현장 안전수칙
-                    </span>
-                    <span className="badge badge-amber text-[9px]">필독</span>
-                  </div>
-                  <p className="text-xs text-white leading-relaxed font-semibold">
-                    {translationService.translate('작업 전 안전점검을 반드시 실시하세요.', selectedLang)}
-                  </p>
-                  <p className="text-[11px] text-gray-400">
-                    {translationService.translate('보호구(안전모, 안전화, 보안경) 착용 필수', selectedLang)}
-                  </p>
-                </div>
-
-                {/* Quick Action Grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    onClick={() => setActiveTab('tbm')}
-                    className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left space-y-1 transition-colors"
-                  >
-                    <FileSignature className="w-5 h-5 text-emerald-400" />
-                    <div className="font-bold text-white">TBM 전자서명</div>
-                    <div className="text-[10px] text-gray-400">작업 전 서명 이수</div>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab('ptw')}
-                    className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left space-y-1 transition-colors"
-                  >
-                    <FileCheck2 className="w-5 h-5 text-amber-400" />
-                    <div className="font-bold text-white">작업허가서(PTW)</div>
-                    <div className="text-[10px] text-gray-400">고소/화기 작업 신청</div>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab('qr')}
-                    className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left space-y-1 transition-colors"
-                  >
-                    <QrCode className="w-5 h-5 text-blue-400" />
-                    <div className="font-bold text-white">QR LOTO/MSDS</div>
-                    <div className="text-[10px] text-gray-400">카메라 스캔 확인</div>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab('inspect')}
-                    className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-left space-y-1 transition-colors"
-                  >
-                    <ClipboardList className="w-5 h-5 text-purple-400" />
-                    <div className="font-bold text-white">설비 일일 점검</div>
-                    <div className="text-[10px] text-gray-400">온도/압력 모국어 입력</div>
-                  </button>
-                </div>
-
-                {/* Before & After Photo Report Card */}
-                <button
-                  onClick={() => setActiveTab('report')}
-                  className="w-full p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-5 h-5 text-emerald-400" />
-                    <div className="text-left">
-                      <div className="font-bold text-white">Before & After 작업 보고</div>
-                      <div className="text-[10px] text-gray-400">작업 전/후 사진 필수 업로드</div>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400" />
-                </button>
-
-                {/* LOTO Notice */}
-                <div className="p-2.5 bg-amber-950/30 border border-amber-500/20 rounded-xl text-[11px] text-amber-200">
-                  <div className="flex items-center gap-1 font-bold mb-0.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>LOTO 알림:</span>
-                  </div>
-                  {translationService.translate(
-                    'LOTO(잠금장치)가 발부된 설비는 임의 조작이 금지됩니다.',
-                    selectedLang
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Tab: TBM Canvas Signature */}
-            {activeTab === 'tbm' && (
-              <div className="space-y-3 text-xs">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <FileSignature className="w-4 h-4 text-emerald-400" />
-                  작업 전 안전수칙 모바일 전자서명
-                </div>
-
-                <div className="p-3 bg-white/5 rounded-xl space-y-1 text-[11px] text-gray-300">
-                  <div className="font-semibold text-white">작업명: 고소 및 배관 용접 작업</div>
-                  <p>1. 안전모 및 안전그네 착용을 확인했습니다.</p>
-                  <p>2. 소화기 2기 배치를 확인했습니다.</p>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1 text-[11px] text-gray-400">
-                    <span>터치 또는 마우스로 아래에 서명하세요:</span>
-                    <button
-                      type="button"
-                      onClick={clearCanvas}
-                      className="text-red-400 hover:underline"
-                    >
-                      다시 쓰기
-                    </button>
-                  </div>
-
-                  <div className="bg-white rounded-xl border-2 border-dashed border-gray-400 overflow-hidden touch-none shadow-inner">
-                    <canvas
-                      ref={canvasRef}
-                      width={310}
-                      height={140}
-                      onMouseDown={startDrawing}
-                      onMouseMove={draw}
-                      onMouseUp={stopDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDrawing}
-                      className="w-full h-[140px] cursor-crosshair"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSubmitSignature}
-                  disabled={!hasSigned}
-                  className={`btn-primary w-full justify-center text-xs ${
-                    !hasSigned ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  전자서명 제출 (DB 영구 보관)
-                </button>
-              </div>
-            )}
-
-            {/* Tab: PTW Request */}
-            {activeTab === 'ptw' && (
-              <div className="space-y-3 text-xs">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4 text-amber-400" />
-                  모바일 안전작업허가서(PTW) 신청
-                </div>
-
-                <form onSubmit={handleCreatePTWSubmit} className="space-y-2.5">
-                  <div>
-                    <label className="text-[11px] text-gray-400 block mb-0.5">작업 명칭</label>
-                    <input
-                      type="text"
-                      value={ptwForm.taskName}
-                      onChange={(e) => setPtwForm({ ...ptwForm, taskName: e.target.value })}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-gray-400 block mb-0.5">작업 위치</label>
-                    <input
-                      type="text"
-                      value={ptwForm.location}
-                      onChange={(e) => setPtwForm({ ...ptwForm, location: e.target.value })}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-gray-400 block mb-0.5">위험 요인</label>
-                    <input
-                      type="text"
-                      value={ptwForm.hazardFactors}
-                      onChange={(e) => setPtwForm({ ...ptwForm, hazardFactors: e.target.value })}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white"
-                    />
-                  </div>
-
-                  <button type="submit" className="btn-primary w-full justify-center text-xs">
-                    허가 신청서 전송
-                  </button>
-                </form>
-
-                <div className="pt-2 border-t border-white/10">
-                  <span className="text-[11px] text-gray-400 font-bold block mb-1">
-                    신청 이력 및 승인 상태:
-                  </span>
-                  {ptwList.map((p) => (
-                    <div key={p.id} className="p-2 bg-white/5 rounded-lg text-[11px] mb-1.5 flex justify-between">
-                      <div>
-                        <div className="font-bold text-white">{p.taskName}</div>
-                        <div className="text-gray-400">{p.location}</div>
+          <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-[#0A0A0C]">
+            {/* VIEW A: Login / Sign Up Screen (User Request #2) */}
+            {!isLoggedIn ? (
+              <div className="space-y-4 py-2 text-xs">
+                {!isSignUpView ? (
+                  /* Login Screen */
+                  <div className="p-4 bg-[#1C1C1E] rounded-2xl border border-white/10 space-y-3">
+                    <div className="text-center space-y-1 mb-2">
+                      <div className="w-12 h-12 rounded-2xl bg-[#0071E3] flex items-center justify-center mx-auto text-white shadow-lg shadow-blue-500/20">
+                        <Lock className="w-6 h-6" />
                       </div>
-                      <span className={`badge ${p.status === 'APPROVED' ? 'badge-green' : 'badge-amber'}`}>
-                        {p.status}
-                      </span>
+                      <h3 className="font-bold text-sm text-white pt-1">근로자 모바일 로그인</h3>
+                      <p className="text-[11px] text-gray-400">
+                        스마트폰 번호와 비밀번호를 입력해주세요.
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
-            {/* Tab: QR Scanner Simulator */}
-            {activeTab === 'qr' && (
-              <div className="space-y-3 text-xs">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <QrCode className="w-4 h-4 text-blue-400" />
-                  스마트폰 QR 스캐너 시뮬레이션
-                </div>
+                    <form onSubmit={handleLoginSubmit} className="space-y-2.5">
+                      <div>
+                        <label className="text-[10.5px] text-gray-400 block mb-1">
+                          스마트폰 번호 (ID)
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={loginPhone}
+                          onChange={(e) => setLoginPhone(e.target.value)}
+                          placeholder="010-0000-0000"
+                          className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
 
-                <div className="p-3 bg-black/50 border border-dashed border-white/20 rounded-xl text-center space-y-2">
-                  <Camera className="w-8 h-8 text-blue-400 mx-auto" />
-                  <p className="text-[11px] text-gray-400">
-                    공장 설비 및 약품 용기의 QR 코드를 스캔하세요.
-                  </p>
-                  <div className="flex flex-wrap gap-1.5 justify-center pt-1">
-                    {equipmentList.map((eq) => (
+                      <div>
+                        <label className="text-[10.5px] text-gray-400 block mb-1">
+                          비밀번호 (Password)
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+
                       <button
-                        key={eq.id}
-                        onClick={() => setScannedEquipment(eq)}
-                        className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 text-[10px] px-2 py-1 rounded"
+                        type="submit"
+                        className="btn-primary w-full justify-center py-2.5 mt-2 bg-[#0071E3] hover:bg-[#0077ED] rounded-xl text-xs font-bold"
                       >
-                        [{eq.type}] {eq.name.slice(0, 10)}...
+                        로그인 (Login)
                       </button>
-                    ))}
+                    </form>
+
+                    {/* 회원가입 버튼 (Request #2) */}
+                    <div className="pt-3 border-t border-white/10 text-center space-y-1.5">
+                      <p className="text-[11px] text-gray-400">처음 접속하셨나요?</p>
+                      <button
+                        type="button"
+                        onClick={() => setIsSignUpView(true)}
+                        className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/15 text-white font-semibold rounded-xl text-xs transition-colors"
+                      >
+                        신규 회원가입 및 승인 요청 (Sign Up)
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                {scannedEquipment && (
-                  <div className="p-3 bg-blue-950/40 border border-blue-500/40 rounded-xl space-y-2 animate-fadeIn">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-white">{scannedEquipment.name}</span>
-                      <span className="badge badge-amber">{scannedEquipment.type}</span>
+                ) : (
+                  /* Sign Up Screen (Request #2: 이름, 국적, 핸드폰 번호, password) */
+                  <div className="p-4 bg-[#1C1C1E] rounded-2xl border border-white/10 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                      <div>
+                        <h3 className="font-bold text-sm text-white">회원가입 및 승인 요청</h3>
+                        <p className="text-[10.5px] text-gray-400">관리자 웹 승인 후 계정이 활성화됩니다.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsSignUpView(false)}
+                        className="text-gray-400 hover:text-white text-xs"
+                      >
+                        로그인으로
+                      </button>
                     </div>
 
-                    <div className="p-2 bg-black/40 rounded text-[11px] text-amber-200">
-                      <strong>주의사항:</strong> {scannedEquipment.cautionNotes}
-                    </div>
+                    <form onSubmit={handleSignUpSubmit} className="space-y-2.5">
+                      <div>
+                        <label className="text-[10.5px] text-gray-400 block mb-1">
+                          이름 (영문 성명) *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={signUpForm.name}
+                          onChange={(e) => setSignUpForm({ ...signUpForm, name: e.target.value })}
+                          placeholder="예: Nguyen Van An"
+                          className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white"
+                        />
+                      </div>
 
-                    <div className="p-2 bg-black/40 rounded text-[11px] text-blue-200">
-                      <strong>
-                        {scannedEquipment.type === 'MSDS' ? '모국어 응급조치:' : 'LOTO 해제 절차:'}
-                      </strong>
-                      <p className="mt-0.5">{scannedEquipment.emergencyProcedures}</p>
-                    </div>
+                      <div>
+                        <label className="text-[10.5px] text-gray-400 block mb-1">
+                          국적 (모국어 자동 매핑) *
+                        </label>
+                        <select
+                          value={signUpForm.nationality}
+                          onChange={(e) => setSignUpForm({ ...signUpForm, nationality: e.target.value })}
+                          className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white"
+                        >
+                          {SUPPORTED_LANGUAGES.map((l) => (
+                            <option key={l.code} value={l.code.toUpperCase()} className="bg-gray-900 text-white">
+                              {l.flag} {l.country} ({l.nativeName})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10.5px] text-gray-400 block mb-1">
+                          스마트폰 번호 *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={signUpForm.phoneNumber}
+                          onChange={(e) => setSignUpForm({ ...signUpForm, phoneNumber: e.target.value })}
+                          placeholder="010-XXXX-XXXX"
+                          className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10.5px] text-gray-400 block mb-1">
+                          비밀번호 (Pass word) *
+                        </label>
+                        <input
+                          type="password"
+                          required
+                          value={signUpForm.password}
+                          onChange={(e) => setSignUpForm({ ...signUpForm, password: e.target.value })}
+                          placeholder="4자리 이상 입력"
+                          className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs text-white"
+                        />
+                      </div>
+
+                      <div className="p-2.5 bg-blue-950/40 border border-blue-500/30 rounded-xl text-[10.5px] text-blue-200 leading-relaxed">
+                        💡 승인 요청을 누르면 관리자 웹의 <strong>&quot;앱 연동 승인 대기열&quot;</strong>에 표시되고, 관리자가 인사기록카드 보완 입력 후 최종 승인합니다.
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="btn-primary w-full justify-center py-2.5 bg-[#0071E3] hover:bg-[#0077ED] rounded-xl text-xs font-bold"
+                      >
+                        승인 요청 제출 (Request Approval)
+                      </button>
+                    </form>
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Tab: Smart Checklist Inspection */}
-            {activeTab === 'inspect' && (
-              <div className="space-y-3 text-xs">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4 text-purple-400" />
-                  설비 점검 일지 입력 (모국어 안내)
-                </div>
-
-                <div className="text-[11px] text-gray-300">
-                  대상 설비: <strong>A동 렌더링 쿠커 #1</strong> (정상 기준 온도: 130°C 이하)
-                </div>
-
-                <form onSubmit={handleInspectionSubmit} className="space-y-3">
-                  <div>
-                    <label className="text-[11px] text-gray-300 block mb-1">
-                      내부 가열 온도 (°C) - 130도 초과 시 자동 경고
-                    </label>
-                    <input
-                      type="number"
-                      value={inspectData.temperature}
-                      onChange={(e) =>
-                        setInspectData({ ...inspectData, temperature: Number(e.target.value) })
-                      }
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white font-mono text-base font-bold text-amber-300"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-gray-300 block mb-1">
-                      증기 공급 압력 (bar)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={inspectData.pressure}
-                      onChange={(e) =>
-                        setInspectData({ ...inspectData, pressure: Number(e.target.value) })
-                      }
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white font-mono"
-                    />
-                  </div>
-
-                  <button type="submit" className="btn-primary w-full justify-center text-xs">
-                    점검 완료 및 전송
-                  </button>
-                </form>
-              </div>
-            )}
-
-            {/* Tab: Before & After Report */}
-            {activeTab === 'report' && (
-              <div className="space-y-3 text-xs">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-emerald-400" />
-                  Before & After 사진 작업 보고
-                </div>
-
-                <form onSubmit={handleReportSubmit} className="space-y-2.5">
-                  <div>
-                    <label className="text-[11px] text-gray-300 block mb-0.5">작업명</label>
-                    <input
-                      type="text"
-                      value={reportForm.taskName}
-                      onChange={(e) => setReportForm({ ...reportForm, taskName: e.target.value })}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="p-2 bg-red-950/20 rounded-lg border border-red-500/30">
-                      <div className="text-[10px] text-red-400 font-bold mb-1.5 flex items-center justify-between">
-                        <span>BEFORE (작업 전 2장)</span>
-                        <span className="text-[9px] text-gray-400">사진1 & 사진2</span>
+            ) : (
+              /* VIEW B: Logged-in App Content */
+              <div className="space-y-3">
+                {/* Tab: Home */}
+                {activeTab === 'home' && (
+                  <div className="space-y-3">
+                    {/* Safety Warning Card (Auto translated in worker's native language) */}
+                    <div className="p-3.5 bg-gradient-to-r from-blue-950/80 to-indigo-950/80 border border-blue-500/30 rounded-2xl space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-blue-300 font-bold">
+                        <span>
+                          {translationService.getLanguageInfo(selectedLang).flag} 오늘의 모국어 안전수칙
+                        </span>
+                        <span className="badge badge-amber text-[9px]">필독</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <img
-                          src={reportForm.beforeImg1}
-                          alt="Before 1"
-                          className="h-14 w-full object-cover rounded border border-red-500/40"
-                        />
-                        <img
-                          src={reportForm.beforeImg2}
-                          alt="Before 2"
-                          className="h-14 w-full object-cover rounded border border-red-500/40"
+                      <p className="text-xs text-white leading-relaxed font-semibold">
+                        {translationService.translate('작업 전 안전점검을 반드시 실시하세요.', selectedLang)}
+                      </p>
+                      <p className="text-[11px] text-gray-300">
+                        {translationService.translate('보호구(안전모, 안전화, 보안경) 착용 필수', selectedLang)}
+                      </p>
+                    </div>
+
+                    {/* Quick Action Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <button
+                        onClick={() => setActiveTab('tbm')}
+                        className="p-3 bg-[#1C1C1E] hover:bg-white/10 border border-white/10 rounded-2xl text-left space-y-1 transition-colors"
+                      >
+                        <FileSignature className="w-5 h-5 text-emerald-400" />
+                        <div className="font-bold text-white">TBM 전자서명</div>
+                        <div className="text-[10px] text-gray-400">작업 전 서명 이수</div>
+                      </button>
+
+                      <button
+                        onClick={() => setActiveTab('ptw')}
+                        className="p-3 bg-[#1C1C1E] hover:bg-white/10 border border-white/10 rounded-2xl text-left space-y-1 transition-colors"
+                      >
+                        <FileCheck2 className="w-5 h-5 text-amber-400" />
+                        <div className="font-bold text-white">작업허가서(PTW)</div>
+                        <div className="text-[10px] text-gray-400">고소/화기 작업 신청</div>
+                      </button>
+
+                      {/* Request #7: 기기 사용 승인요청 바로가기 */}
+                      <button
+                        onClick={() => setActiveTab('equipment_use')}
+                        className="p-3 bg-[#1C1C1E] hover:bg-white/10 border border-white/10 rounded-2xl text-left space-y-1 transition-colors"
+                      >
+                        <Truck className="w-5 h-5 text-blue-400" />
+                        <div className="font-bold text-white">기기 사용 승인요청</div>
+                        <div className="text-[10px] text-gray-400">지게차/고소작업대/크레인</div>
+                      </button>
+
+                      {/* Request #6: 설비 일일 점검 */}
+                      <button
+                        onClick={() => setActiveTab('inspect')}
+                        className="p-3 bg-[#1C1C1E] hover:bg-white/10 border border-white/10 rounded-2xl text-left space-y-1 transition-colors"
+                      >
+                        <ClipboardList className="w-5 h-5 text-purple-400" />
+                        <div className="font-bold text-white">설비 일일 점검</div>
+                        <div className="text-[10px] text-gray-400">웹과 실시간 양방향 연동</div>
+                      </button>
+                    </div>
+
+                    {/* Before & After Photo Report Card */}
+                    <button
+                      onClick={() => setActiveTab('report')}
+                      className="w-full p-3.5 bg-[#1C1C1E] hover:bg-white/10 border border-white/10 rounded-2xl flex items-center justify-between text-xs transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                          <Camera className="w-4 h-4" />
+                        </div>
+                        <div className="text-left">
+                          <div className="font-bold text-white">Before & After 작업 보고서</div>
+                          <div className="text-[10px] text-gray-400">사진 업로드 & 문제점/개선 설명</div>
+                        </div>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-gray-400" />
+                    </button>
+
+                    {/* LOTO Notice */}
+                    <div className="p-2.5 bg-amber-950/30 border border-amber-500/20 rounded-2xl text-[11px] text-amber-200">
+                      <div className="flex items-center gap-1 font-bold mb-0.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>LOTO 알림:</span>
+                      </div>
+                      {translationService.translate(
+                        'LOTO(잠금장치)가 발부된 설비는 임의 조작이 금지됩니다.',
+                        selectedLang
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab: TBM Canvas Signature */}
+                {activeTab === 'tbm' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="font-bold text-sm text-white flex items-center gap-2">
+                      <FileSignature className="w-4 h-4 text-emerald-400" />
+                      작업 전 안전수칙 모바일 전자서명
+                    </div>
+
+                    <div className="p-3 bg-[#1C1C1E] rounded-2xl space-y-1 text-[11px] text-gray-300">
+                      <div className="font-semibold text-white">작업명: 고소 및 배관 용접 작업</div>
+                      <p>1. 안전모 및 안전그네 착용을 확인했습니다.</p>
+                      <p>2. 소화기 2기 배치를 확인했습니다.</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1 text-[11px] text-gray-400">
+                        <span>터치로 아래에 서명하세요:</span>
+                        <button
+                          type="button"
+                          onClick={clearCanvas}
+                          className="text-red-400 hover:underline"
+                        >
+                          다시 쓰기
+                        </button>
+                      </div>
+
+                      <div className="bg-white rounded-2xl border-2 border-dashed border-gray-400 overflow-hidden touch-none shadow-inner">
+                        <canvas
+                          ref={canvasRef}
+                          width={310}
+                          height={140}
+                          onMouseDown={startDrawing}
+                          onMouseMove={draw}
+                          onMouseUp={stopDrawing}
+                          onTouchStart={startDrawing}
+                          onTouchMove={draw}
+                          onTouchEnd={stopDrawing}
+                          className="w-full h-[140px] cursor-crosshair"
                         />
                       </div>
                     </div>
 
-                    <div className="p-2 bg-emerald-950/20 rounded-lg border border-emerald-500/30">
-                      <div className="text-[10px] text-emerald-400 font-bold mb-1.5 flex items-center justify-between">
-                        <span>AFTER (작업 후 2장)</span>
-                        <span className="text-[9px] text-gray-400">사진1 & 사진2</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <img
-                          src={reportForm.afterImg1}
-                          alt="After 1"
-                          className="h-14 w-full object-cover rounded border border-emerald-500/40"
+                    <button
+                      onClick={handleSubmitSignature}
+                      disabled={!hasSigned}
+                      className={`btn-primary w-full justify-center text-xs py-2.5 rounded-xl ${
+                        !hasSigned ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      전자서명 제출 (DB 영구 보관)
+                    </button>
+                  </div>
+                )}
+
+                {/* Tab: PTW Request */}
+                {activeTab === 'ptw' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="font-bold text-sm text-white flex items-center gap-2">
+                      <FileCheck2 className="w-4 h-4 text-amber-400" />
+                      모바일 안전작업허가서(PTW) 신청
+                    </div>
+
+                    <form onSubmit={handleCreatePTWSubmit} className="space-y-2.5">
+                      <div>
+                        <label className="text-[11px] text-gray-400 block mb-0.5">작업 명칭</label>
+                        <input
+                          type="text"
+                          value={ptwForm.taskName}
+                          onChange={(e) => setPtwForm({ ...ptwForm, taskName: e.target.value })}
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-xs text-white"
                         />
-                        <img
-                          src={reportForm.afterImg2}
-                          alt="After 2"
-                          className="h-14 w-full object-cover rounded border border-emerald-500/40"
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-400 block mb-0.5">작업 위치</label>
+                        <input
+                          type="text"
+                          value={ptwForm.location}
+                          onChange={(e) => setPtwForm({ ...ptwForm, location: e.target.value })}
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-xs text-white"
                         />
                       </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-400 block mb-0.5">위험 요인</label>
+                        <input
+                          type="text"
+                          value={ptwForm.hazardFactors}
+                          onChange={(e) => setPtwForm({ ...ptwForm, hazardFactors: e.target.value })}
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-xs text-white"
+                        />
+                      </div>
+
+                      <button type="submit" className="btn-primary w-full justify-center text-xs py-2.5 rounded-xl">
+                        허가 신청서 전송
+                      </button>
+                    </form>
+
+                    <div className="pt-2 border-t border-white/10">
+                      <span className="text-[11px] text-gray-400 font-bold block mb-1">
+                        신청 이력 및 승인 상태:
+                      </span>
+                      {ptwList.map((p) => (
+                        <div key={p.id} className="p-2.5 bg-[#1C1C1E] rounded-xl text-[11px] mb-1.5 flex justify-between items-center">
+                          <div>
+                            <div className="font-bold text-white">{p.taskName}</div>
+                            <div className="text-gray-400">{p.location}</div>
+                          </div>
+                          <span className={`badge ${p.status === 'APPROVED' ? 'badge-green' : 'badge-amber'}`}>
+                            {p.status}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                )}
 
-                  <div>
-                    <label className="text-[11px] text-gray-300 block mb-0.5">조치 내용</label>
-                    <textarea
-                      rows={2}
-                      value={reportForm.description}
-                      onChange={(e) => setReportForm({ ...reportForm, description: e.target.value })}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-white text-[11px]"
-                    />
+                {/* Tab: Equipment Usage Request (Request #7) */}
+                {activeTab === 'equipment_use' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="font-bold text-sm text-white flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-blue-400" />
+                      기기/장비 사용 승인 요청 (지게차, 고소작업대 등)
+                    </div>
+
+                    <form onSubmit={handleEquipmentUseSubmit} className="space-y-2.5 bg-[#1C1C1E] p-3 rounded-2xl border border-white/10">
+                      <div>
+                        <label className="text-[11px] text-gray-300 block mb-1">사용 대상 기기 *</label>
+                        <select
+                          value={equipmentUseForm.equipmentType}
+                          onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, equipmentType: e.target.value })}
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2 text-xs text-white"
+                        >
+                          {equipmentTypes.map((type) => (
+                            <option key={type} value={type} className="bg-gray-900 text-white">
+                              {type}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-300 block mb-1">사용 목적 *</label>
+                        <input
+                          type="text"
+                          required
+                          value={equipmentUseForm.purpose}
+                          onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, purpose: e.target.value })}
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2 text-xs text-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-0.5">사용 시작</label>
+                          <input
+                            type="text"
+                            value={equipmentUseForm.startTime}
+                            onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, startTime: e.target.value })}
+                            className="w-full bg-black/50 border border-white/15 rounded-xl p-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-0.5">사용 종료</label>
+                          <input
+                            type="text"
+                            value={equipmentUseForm.endTime}
+                            onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, endTime: e.target.value })}
+                            className="w-full bg-black/50 border border-white/15 rounded-xl p-1.5 text-xs text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 pt-1 text-[11px] text-gray-300">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={equipmentUseForm.hasLicense}
+                            onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, hasLicense: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span>면허/조종자격 확인</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={equipmentUseForm.preCheckCompleted}
+                            onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, preCheckCompleted: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span>작업 전 사전점검 완료</span>
+                        </label>
+                      </div>
+
+                      <button type="submit" className="btn-primary w-full justify-center text-xs py-2.5 rounded-xl bg-[#0071E3]">
+                        관리자에게 기기 사용 승인 요청
+                      </button>
+                    </form>
+
+                    {/* Usage Request Histories */}
+                    <div className="pt-2 border-t border-white/10 space-y-1.5">
+                      <span className="text-[11px] text-gray-400 font-bold block">
+                        기기 승인 내역:
+                      </span>
+                      {equipmentUsageLogs.map((log) => (
+                        <div key={log.id} className="p-2.5 bg-[#1C1C1E] rounded-xl text-[11px] flex justify-between items-center border border-white/5">
+                          <div>
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              <span>[{log.equipmentType}]</span>
+                              <span className="text-gray-300 font-normal">{log.purpose}</span>
+                            </div>
+                            <div className="text-[10px] text-gray-400">
+                              {log.startTime} ~ {log.endTime}
+                            </div>
+                          </div>
+                          <span className={`badge ${log.status === 'APPROVED' ? 'badge-green' : log.status === 'REJECTED' ? 'badge-red' : 'badge-amber'}`}>
+                            {log.status === 'APPROVED' ? '승인완료' : log.status === 'REJECTED' ? '반려' : '승인대기'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
 
-                  <button type="submit" className="btn-primary w-full justify-center text-xs bg-emerald-600 hover:bg-emerald-500">
-                    <Upload className="w-3.5 h-3.5" />
-                    사진 보고서 관리자 전송
-                  </button>
-                </form>
+                {/* Tab: Smart Checklist Inspection (Request #6) */}
+                {activeTab === 'inspect' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="font-bold text-sm text-white flex items-center gap-2">
+                      <ClipboardList className="w-4 h-4 text-purple-400" />
+                      설비 일일 점검 일지 (모국어 입력)
+                    </div>
+
+                    {/* Synced with Admin Target List */}
+                    <div>
+                      <label className="text-[11px] text-gray-400 block mb-1 font-semibold">
+                        점검 대상 설비 선택 (웹 실시간 연동)
+                      </label>
+                      <select
+                        value={selectedInspectTarget}
+                        onChange={(e) => setSelectedInspectTarget(e.target.value)}
+                        className="w-full bg-[#1C1C1E] border border-white/15 rounded-xl p-2.5 text-xs text-white"
+                      >
+                        {inspectionTargets.map((target) => (
+                          <option key={target.id} value={target.id} className="bg-gray-900 text-white">
+                            {target.name} ({target.location})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <form onSubmit={handleInspectionSubmit} className="space-y-3 bg-[#1C1C1E] p-3.5 rounded-2xl border border-white/10">
+                      <div>
+                        <label className="text-[11px] text-gray-300 block mb-1">
+                          내부 가열 온도 (°C) - 130°C 초과 시 관리자 웹에 즉시 경보
+                        </label>
+                        <input
+                          type="number"
+                          value={inspectData.temperature}
+                          onChange={(e) =>
+                            setInspectData({ ...inspectData, temperature: Number(e.target.value) })
+                          }
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-white font-mono text-base font-bold text-amber-300"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] text-gray-300 block mb-1">
+                          증기 공급 압력 (bar)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={inspectData.pressure}
+                          onChange={(e) =>
+                            setInspectData({ ...inspectData, pressure: Number(e.target.value) })
+                          }
+                          className="w-full bg-black/50 border border-white/15 rounded-xl p-2.5 text-white font-mono"
+                        />
+                      </div>
+
+                      <button type="submit" className="btn-primary w-full justify-center text-xs py-2.5 rounded-xl">
+                        점검 완료 및 관리자 웹 전송
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* Tab: Before & After Report (Request #4: 자동기입, 사진올리기, 문제점/개선이후 설명) */}
+                {activeTab === 'report' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="font-bold text-sm text-white flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-emerald-400" />
+                      Before & After 사진 작업 완료 보고서
+                    </div>
+
+                    <form onSubmit={handleReportSubmit} className="space-y-2.5 bg-[#1C1C1E] p-3 rounded-2xl border border-white/10">
+                      {/* Auto-filled fields */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <label className="text-gray-400 block mb-0.5">작업명 (자동)</label>
+                          <input
+                            type="text"
+                            value={reportForm.taskName}
+                            onChange={(e) => setReportForm({ ...reportForm, taskName: e.target.value })}
+                            className="w-full bg-black/40 border border-white/10 rounded-lg p-1.5 text-white text-xs font-semibold"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-400 block mb-0.5">작업자 (자동 기입)</label>
+                          <input
+                            type="text"
+                            readOnly
+                            value={reportForm.workerName}
+                            className="w-full bg-black/20 border border-white/10 rounded-lg p-1.5 text-emerald-300 text-xs font-semibold"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-400 block mb-0.5">작업일 (자동 기입)</label>
+                          <input
+                            type="text"
+                            readOnly
+                            value={reportForm.workDate}
+                            className="w-full bg-black/20 border border-white/10 rounded-lg p-1.5 text-gray-300 text-xs font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-gray-400 block mb-0.5">작업 위치</label>
+                          <input
+                            type="text"
+                            value={reportForm.location}
+                            onChange={(e) => setReportForm({ ...reportForm, location: e.target.value })}
+                            className="w-full bg-black/40 border border-white/10 rounded-lg p-1.5 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Before Photos & Problem Description (Request #4) */}
+                      <div className="p-2.5 bg-red-950/20 rounded-xl border border-red-500/30 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] text-red-400 font-bold">
+                          <span>BEFORE (작업 전 사진)</span>
+                          <span className="text-[9px] text-gray-400">사진 등록 가능</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <img
+                              src={reportForm.beforeImg1}
+                              alt="Before 1"
+                              className="h-16 w-full object-cover rounded-lg border border-red-500/40"
+                            />
+                            <label className="absolute bottom-1 right-1 p-1 bg-black/70 rounded text-[9px] cursor-pointer hover:bg-black">
+                              <Upload className="w-3 h-3 text-white inline" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handlePhotoUpload('beforeImg1', e)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          <div className="relative">
+                            <img
+                              src={reportForm.beforeImg2}
+                              alt="Before 2"
+                              className="h-16 w-full object-cover rounded-lg border border-red-500/40"
+                            />
+                            <label className="absolute bottom-1 right-1 p-1 bg-black/70 rounded text-[9px] cursor-pointer hover:bg-black">
+                              <Upload className="w-3 h-3 text-white inline" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handlePhotoUpload('beforeImg2', e)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10.5px] text-red-300 font-medium block mb-0.5">
+                            Before 문제점에 대한 설명 *
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={reportForm.beforeDescription}
+                            onChange={(e) => setReportForm({ ...reportForm, beforeDescription: e.target.value })}
+                            className="w-full bg-black/50 border border-red-500/30 rounded-lg p-1.5 text-white text-[11px]"
+                            placeholder="작업 전 파손, 누설, 마모 등 문제점을 기재하세요."
+                          />
+                        </div>
+                      </div>
+
+                      {/* After Photos & Improvement Description (Request #4) */}
+                      <div className="p-2.5 bg-emerald-950/20 rounded-xl border border-emerald-500/30 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] text-emerald-400 font-bold">
+                          <span>AFTER (작업 후 사진)</span>
+                          <span className="text-[9px] text-gray-400">사진 등록 가능</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <img
+                              src={reportForm.afterImg1}
+                              alt="After 1"
+                              className="h-16 w-full object-cover rounded-lg border border-emerald-500/40"
+                            />
+                            <label className="absolute bottom-1 right-1 p-1 bg-black/70 rounded text-[9px] cursor-pointer hover:bg-black">
+                              <Upload className="w-3 h-3 text-white inline" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handlePhotoUpload('afterImg1', e)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          <div className="relative">
+                            <img
+                              src={reportForm.afterImg2}
+                              alt="After 2"
+                              className="h-16 w-full object-cover rounded-lg border border-emerald-500/40"
+                            />
+                            <label className="absolute bottom-1 right-1 p-1 bg-black/70 rounded text-[9px] cursor-pointer hover:bg-black">
+                              <Upload className="w-3 h-3 text-white inline" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => handlePhotoUpload('afterImg2', e)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10.5px] text-emerald-300 font-medium block mb-0.5">
+                            After 개선이후 설명 *
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={reportForm.afterDescription}
+                            onChange={(e) => setReportForm({ ...reportForm, afterDescription: e.target.value })}
+                            className="w-full bg-black/50 border border-emerald-500/30 rounded-lg p-1.5 text-white text-[11px]"
+                            placeholder="개선 완료 사항 및 안전 조치 내용을 기재하세요."
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="btn-primary w-full justify-center text-xs py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        작업완료 보고서 전송
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* Tab: QR Scanner Simulator */}
+                {activeTab === 'qr' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="font-bold text-sm text-white flex items-center gap-2">
+                      <QrCode className="w-4 h-4 text-blue-400" />
+                      스마트폰 QR 스캐너 시뮬레이션
+                    </div>
+
+                    <div className="p-3 bg-black/50 border border-dashed border-white/20 rounded-2xl text-center space-y-2">
+                      <Camera className="w-8 h-8 text-blue-400 mx-auto" />
+                      <p className="text-[11px] text-gray-400">
+                        공장 설비 및 약품 용기의 QR 코드를 스캔하세요.
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 justify-center pt-1">
+                        {equipmentList.map((eq) => (
+                          <button
+                            key={eq.id}
+                            onClick={() => setScannedEquipment(eq)}
+                            className="bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 text-[10px] px-2 py-1 rounded-lg"
+                          >
+                            [{eq.type}] {eq.name.slice(0, 10)}...
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {scannedEquipment && (
+                      <div className="p-3 bg-blue-950/40 border border-blue-500/40 rounded-2xl space-y-2 animate-fadeIn">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-sm text-white">{scannedEquipment.name}</span>
+                          <span className="badge badge-amber">{scannedEquipment.type}</span>
+                        </div>
+
+                        <div className="p-2 bg-black/40 rounded-xl text-[11px] text-amber-200">
+                          <strong>주의사항:</strong> {scannedEquipment.cautionNotes}
+                        </div>
+
+                        <div className="p-2 bg-black/40 rounded-xl text-[11px] text-blue-200">
+                          <strong>
+                            {scannedEquipment.type === 'MSDS' ? '모국어 응급조치:' : 'LOTO 해제 절차:'}
+                          </strong>
+                          <p className="mt-0.5">{scannedEquipment.emergencyProcedures}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           {/* Bottom Mobile Tab Bar */}
-          <div className="h-14 bg-[#111827] border-t border-white/10 flex items-center justify-around px-2 text-gray-400">
-            <button
-              onClick={() => setActiveTab('home')}
-              className={`flex flex-col items-center gap-0.5 ${
-                activeTab === 'home' ? 'text-blue-400' : 'hover:text-white'
-              }`}
-            >
-              <Smartphone className="w-4 h-4" />
-              <span className="text-[10px]">홈</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('tbm')}
-              className={`flex flex-col items-center gap-0.5 ${
-                activeTab === 'tbm' ? 'text-blue-400' : 'hover:text-white'
-              }`}
-            >
-              <FileSignature className="w-4 h-4" />
-              <span className="text-[10px]">TBM서명</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('ptw')}
-              className={`flex flex-col items-center gap-0.5 ${
-                activeTab === 'ptw' ? 'text-blue-400' : 'hover:text-white'
-              }`}
-            >
-              <FileCheck2 className="w-4 h-4" />
-              <span className="text-[10px]">작업허가</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('qr')}
-              className={`flex flex-col items-center gap-0.5 ${
-                activeTab === 'qr' ? 'text-blue-400' : 'hover:text-white'
-              }`}
-            >
-              <QrCode className="w-4 h-4" />
-              <span className="text-[10px]">QR스캔</span>
-            </button>
-          </div>
+          {isLoggedIn && (
+            <div className="h-14 bg-[#1C1C1E] border-t border-white/10 flex items-center justify-around px-2 text-gray-400">
+              <button
+                onClick={() => setActiveTab('home')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  activeTab === 'home' ? 'text-blue-400 font-bold' : 'hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-4 h-4" />
+                <span className="text-[10px]">홈</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('tbm')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  activeTab === 'tbm' ? 'text-blue-400 font-bold' : 'hover:text-white'
+                }`}
+              >
+                <FileSignature className="w-4 h-4" />
+                <span className="text-[10px]">TBM서명</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('equipment_use')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  activeTab === 'equipment_use' ? 'text-blue-400 font-bold' : 'hover:text-white'
+                }`}
+              >
+                <Truck className="w-4 h-4" />
+                <span className="text-[10px]">기기신청</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('inspect')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  activeTab === 'inspect' ? 'text-blue-400 font-bold' : 'hover:text-white'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                <span className="text-[10px]">설비점검</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('report')}
+                className={`flex flex-col items-center gap-0.5 ${
+                  activeTab === 'report' ? 'text-blue-400 font-bold' : 'hover:text-white'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                <span className="text-[10px]">사진보고</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -9,6 +9,8 @@ export interface WorkReportProps {
   beforeImgs?: string[];
   afterImgs?: string[];
   description: string;
+  beforeDescription?: string;
+  afterDescription?: string;
   reportedAt?: string;
 }
 
@@ -23,6 +25,8 @@ export class WorkReport {
   public readonly beforeImgs: string[];
   public readonly afterImgs: string[];
   public readonly description: string;
+  public readonly beforeDescription?: string;
+  public readonly afterDescription?: string;
   public readonly reportedAt: string;
 
   constructor(props: WorkReportProps) {
@@ -36,6 +40,8 @@ export class WorkReport {
     this.beforeImgs = props.beforeImgs && props.beforeImgs.length > 0 ? props.beforeImgs : [this.beforeImg].filter(Boolean);
     this.afterImgs = props.afterImgs && props.afterImgs.length > 0 ? props.afterImgs : [this.afterImg].filter(Boolean);
     this.description = props.description;
+    this.beforeDescription = props.beforeDescription;
+    this.afterDescription = props.afterDescription;
     this.reportedAt = props.reportedAt || new Date().toISOString();
   }
 }

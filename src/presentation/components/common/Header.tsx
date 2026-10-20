@@ -59,51 +59,51 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
   }, [baseUrl, apkUrl, webUrl]);
 
   return (
-    <header className="h-[70px] bg-white/95 backdrop-blur-md border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-40 shadow-sm">
+    <header className="h-[68px] bg-white/85 backdrop-blur-xl border-b border-black/8 px-6 flex items-center justify-between sticky top-0 z-40">
       {/* Brand & Factory Status */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-amber-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <div className="w-10 h-10 rounded-2xl bg-[#0071E3] flex items-center justify-center shadow-md shadow-blue-500/20">
             <ShieldCheck className="w-6 h-6 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg text-slate-900 tracking-tight">SafeGuard AI</span>
-              <span className="text-[10px] uppercase font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
-                Enterprise 16-Lang
+              <span className="font-bold text-lg text-[#1D1D1F] tracking-tight">SafeGuard AI</span>
+              <span className="text-[10px] uppercase font-bold bg-[#0071E3]/10 text-[#0071E3] px-2 py-0.5 rounded-full">
+                Enterprise 17-Lang
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium">근로자 스마트 안전 보건 및 설비 통합관제</p>
+            <p className="text-xs text-[#86868B] font-medium">근로자 스마트 안전 보건 및 설비 통합관제</p>
           </div>
         </div>
 
-        <div className="hidden lg:flex items-center gap-2 ml-6 pl-6 border-l border-slate-200 text-xs text-slate-500 font-medium">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <div className="hidden lg:flex items-center gap-2 ml-6 pl-6 border-l border-black/8 text-xs text-[#6E6E73] font-medium">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#34C759] animate-pulse"></span>
           <span>공정 제1공장 센서 & 웹소켓 정상 연결됨</span>
         </div>
       </div>
 
       {/* Action Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         {/* Smartphone App Install Button (APK & QR) */}
         <button
           onClick={() => setShowInstallModal(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-emerald-500/20 transition-all active:scale-95"
+          className="btn-secondary text-xs py-2 px-3.5 flex items-center gap-2"
           title="스마트폰에 안드로이드 APK 앱 설치 및 QR 연동"
         >
-          <Download className="w-4 h-4" />
-          <span>스마트폰 앱 설치 (APK / QR)</span>
+          <Download className="w-4 h-4 text-[#0071E3]" />
+          <span>앱 설치 (APK / QR)</span>
         </button>
 
         {/* Worker Mobile App Simulator Trigger */}
         <button
           onClick={onOpenMobileView}
-          className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-orange-500/20 border border-amber-400/30 transition-transform active:scale-95"
+          className="btn-primary text-xs py-2 px-3.5 flex items-center gap-2"
           title="근로자 전용 모바일 앱 화면 체험"
         >
           <Smartphone className="w-4 h-4" />
-          <span>시뮬레이터 팝업</span>
-          <span className="bg-black/30 text-[10px] px-1.5 py-0.5 rounded-full font-mono">16개국어</span>
+          <span>모바일 시뮬레이터</span>
+          <span className="bg-black/20 text-[10px] px-1.5 py-0.5 rounded-full font-mono">17개국어</span>
         </button>
 
         {/* Direct Mobile Page Link */}
@@ -111,10 +111,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
           href="/mobile"
           target="_blank"
           rel="noreferrer"
-          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+          className="btn-secondary text-xs py-2 px-3 flex items-center gap-1.5 text-[#0071E3]"
           title="근로자 모바일 전용 페이지 새창 열기"
         >
-          <span>📱 모바일 전용창 (/mobile)</span>
+          <span>📱 모바일 전용창</span>
         </a>
 
         {/* Notifications Popover */}

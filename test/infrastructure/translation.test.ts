@@ -31,4 +31,18 @@ describe('MultiLanguageTranslationService (16 Countries + KO/EN)', () => {
     expect(translatedVN).toContain('hàn'); // 용접 (hàn in Vietnamese)
     expect(translatedMN).toBeTruthy();
   });
+
+  it('should detect language code automatically by nationality', () => {
+    expect(service.detectLanguageByNationality('VN')).toBe('vi');
+    expect(service.detectLanguageByNationality('MN')).toBe('mn');
+    expect(service.detectLanguageByNationality('PH')).toBe('ph');
+    expect(service.detectLanguageByNationality('KR')).toBe('ko');
+    expect(service.detectLanguageByNationality('KH')).toBe('km');
+  });
+
+  it('should reverse translate foreign worker text into Korean for admin web', () => {
+    const vnReport = 'Đã thay thế gioăng đệm và kiểm tra rò rỉ xong.';
+    const koTranslated = service.translateToKorean(vnReport, 'vi');
+    expect(koTranslated).toContain('가스켓');
+  });
 });

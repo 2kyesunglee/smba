@@ -16,6 +16,7 @@ export interface WorkerProps {
   contractEndDate: string;
   departureDate?: string;
   specialHealthCheckDate?: string;
+  password?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -36,6 +37,7 @@ export class Worker {
   public departureDate?: string;
   public reEntryAllowed: boolean;
   public specialHealthCheckDate?: string;
+  public password?: string;
   public readonly createdAt: string;
   public updatedAt: string;
 
@@ -55,6 +57,7 @@ export class Worker {
     this.departureDate = props.departureDate;
     this.reEntryAllowed = props.reEntryAllowed ?? false;
     this.specialHealthCheckDate = props.specialHealthCheckDate;
+    this.password = props.password;
     this.createdAt = props.createdAt || new Date().toISOString();
     this.updatedAt = props.updatedAt || new Date().toISOString();
   }
@@ -92,6 +95,7 @@ export class Worker {
     if (props.contractEndDate !== undefined) this.contractEndDate = props.contractEndDate;
     if (props.departureDate !== undefined) this.departureDate = props.departureDate;
     if (props.specialHealthCheckDate !== undefined) this.specialHealthCheckDate = props.specialHealthCheckDate;
+    if (props.password !== undefined) this.password = props.password;
     this.updatedAt = new Date().toISOString();
   }
 
