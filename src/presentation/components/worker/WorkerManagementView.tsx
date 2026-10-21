@@ -9,6 +9,7 @@ import {
   Search,
   Filter,
   CheckCircle,
+  CheckCircle2,
   Clock,
   Calendar,
   Phone,
@@ -104,20 +105,35 @@ export const WorkerManagementView: React.FC = () => {
     alert(`[수정 완료] ${editingWorker.name} 근로자의 인사카드가 성공적으로 변경되었습니다.`);
   };
 
-  // Approval Submission (Request #2: 대기열에서 국가, 주민번호, 비자 등 기입 후 연동 승인 -> 마스터 탭으로 저장)
+  // Approval Submission (대기열에서 국가, 주민번호, 비자 등 기입 후 연동 승인 -> 마스터 탭으로 저장)
   const handleApprovalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!approvalModalWorker) return;
 
+    const alienReg = approvalModalWorker.alienRegNumber?.trim() || '미등록 (차후보완)';
     updateWorker(approvalModalWorker.id, {
       ...approvalModalWorker,
+      alienRegNumber: alienReg,
       status: 'ACTIVE',
     });
     approveWorker(approvalModalWorker.id);
     setApprovalModalWorker(null);
+    setStatusFilter('ALL');
+    setSearchTerm('');
     setActiveTab('list');
     alert(
-      `🎉 [앱 연동 승인 완료]\n\n${approvalModalWorker.name} 근로자의 인사기록카드가 정상 연동되었으며,\n"근로자 전체 마스터 탭"으로 이동하여 활성화 저장되었습니다.`
+      `🎉 [앱 연동 승인 완료]\n\n${approvalModalWorker.name} 근로자의 인사기록카드가 정상 연동되었으며,\n"전체 근로자 마스터" 탭으로 이동하여 활성화 저장되었습니다.`
+    );
+  };
+
+  // Quick Approval Handler without modal
+  const handleQuickApprove = (worker: any) => {
+    approveWorker(worker.id);
+    setStatusFilter('ALL');
+    setSearchTerm('');
+    setActiveTab('list');
+    alert(
+      `🎉 [앱 연동 즉시 승인 완료]\n\n${worker.name} (${worker.phoneNumber}) 근로자가 승인되어\n"전체 근로자 마스터" 탭으로 이동했습니다.`
     );
   };
 
@@ -347,13 +363,24 @@ export const WorkerManagementView: React.FC = () => {
                         <td className="text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             {w.status === 'PENDING_APPROVAL' ? (
-                              <button
-                                onClick={() => setApprovalModalWorker(w)}
-                                className="btn-primary text-xs py-1.5 px-3 bg-[#FF9500] hover:bg-[#E08500] shadow-none"
-                              >
-                                <UserCheck className="w-3.5 h-3.5" />
-                                연동 승인
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleQuickApprove(w)}
+                                  className="btn-primary text-xs py-1.5 px-2.5 bg-[#34C759] hover:bg-[#2FB350] shadow-none flex items-center gap-1"
+                                  title="클릭 시 즉시 승인 및 전체 마스터 DB로 이동"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  즉시 승인
+                                </button>
+                                <button
+                                  onClick={() => setApprovalModalWorker(w)}
+                                  className="btn-primary text-xs py-1.5 px-2.5 bg-[#FF9500] hover:bg-[#E08500] shadow-none flex items-center gap-1"
+                                  title="인사기록카드 보완 입력 후 승인"
+                                >
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                  상세 승인
+                                </button>
+                              </div>
                             ) : (
                               <button
                                 onClick={() => setEditingWorker(w)}
@@ -907,12 +934,11 @@ export const WorkerManagementView: React.FC = () => {
 
                 <div>
                   <label className="block text-[#1D1D1F] font-semibold mb-1">
-                    주민번호 (외국인등록번호) *
+                    주민번호 (외국인등록번호)
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="950512-5123456"
+                    placeholder="950512-5123456 (미등록 시 차후 보완)"
                     value={approvalModalWorker.alienRegNumber || ''}
                     onChange={(e) => setApprovalModalWorker({ ...approvalModalWorker, alienRegNumber: e.target.value })}
                     className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl px-3.5 py-2.5 text-[#1D1D1F]"

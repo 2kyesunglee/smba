@@ -45,7 +45,7 @@ export class PTWRequest {
     this.workDate = props.workDate;
     this.hazardFactors = props.hazardFactors;
     this.safetyMeasures = props.safetyMeasures;
-    this._status = props.status || 'REQUESTED';
+    this._status = props.status || (props as any)?._status || 'REQUESTED';
     this.approvedBy = props.approvedBy;
     this.workerSignedAt = props.workerSignedAt || new Date().toISOString();
     this.approvedAt = props.approvedAt;
@@ -59,6 +59,31 @@ export class PTWRequest {
 
   public get status(): PTWStatus {
     return this._status;
+  }
+
+  public set status(val: PTWStatus) {
+    this._status = val;
+  }
+
+  public toJSON(): Record<string, any> {
+    return {
+      id: this.id,
+      ptwNumber: this.ptwNumber,
+      workerId: this.workerId,
+      workerName: this.workerName,
+      taskName: this.taskName,
+      location: this.location,
+      workDate: this.workDate,
+      hazardFactors: this.hazardFactors,
+      safetyMeasures: this.safetyMeasures,
+      status: this._status,
+      _status: this._status,
+      approvedBy: this.approvedBy,
+      workerSignedAt: this.workerSignedAt,
+      approvedAt: this.approvedAt,
+      rejectionReason: this.rejectionReason,
+      createdAt: this.createdAt,
+    };
   }
 
   public approve(adminId: string): void {

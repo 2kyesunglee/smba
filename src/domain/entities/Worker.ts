@@ -51,7 +51,7 @@ export class Worker {
     this.visaType = props.visaType;
     this.gender = props.gender || 'M';
     this.bloodType = props.bloodType;
-    this._status = props.status || 'PENDING_APPROVAL';
+    this._status = props.status || (props as any)?._status || 'PENDING_APPROVAL';
     this.contractStartDate = props.contractStartDate;
     this.contractEndDate = props.contractEndDate;
     this.departureDate = props.departureDate;
@@ -68,6 +68,35 @@ export class Worker {
 
   public get status(): WorkerStatus {
     return this._status;
+  }
+
+  public set status(value: WorkerStatus) {
+    this._status = value;
+    this.updatedAt = new Date().toISOString();
+  }
+
+  public toJSON(): Record<string, any> {
+    return {
+      id: this.id,
+      name: this.name,
+      koreanName: this.koreanName,
+      alienRegNumber: this.alienRegNumber,
+      phoneNumber: this.phoneNumber,
+      nationality: this.nationality,
+      visaType: this.visaType,
+      gender: this.gender,
+      bloodType: this.bloodType,
+      status: this._status,
+      _status: this._status,
+      contractStartDate: this.contractStartDate,
+      contractEndDate: this.contractEndDate,
+      departureDate: this.departureDate,
+      reEntryAllowed: this.reEntryAllowed,
+      specialHealthCheckDate: this.specialHealthCheckDate,
+      password: this.password,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    };
   }
 
   public approve(): void {
@@ -91,6 +120,7 @@ export class Worker {
     if (props.bloodType !== undefined) this.bloodType = props.bloodType;
     if (props.reEntryAllowed !== undefined) this.reEntryAllowed = props.reEntryAllowed;
     if (props.status !== undefined) this._status = props.status;
+    else if ((props as any)?._status !== undefined) this._status = (props as any)._status;
     if (props.contractStartDate !== undefined) this.contractStartDate = props.contractStartDate;
     if (props.contractEndDate !== undefined) this.contractEndDate = props.contractEndDate;
     if (props.departureDate !== undefined) this.departureDate = props.departureDate;

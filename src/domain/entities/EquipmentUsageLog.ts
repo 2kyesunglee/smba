@@ -51,7 +51,7 @@ export class EquipmentUsageLog {
     this.location = props.location;
     this.hasLicense = props.hasLicense ?? true;
     this.preCheckCompleted = props.preCheckCompleted ?? true;
-    this._status = props.status || 'REQUESTED';
+    this._status = props.status || (props as any)?._status || 'REQUESTED';
     this.approvedBy = props.approvedBy;
     this.approvedAt = props.approvedAt;
     this.rejectReason = props.rejectReason;
@@ -65,6 +65,33 @@ export class EquipmentUsageLog {
 
   public get status(): EquipmentUsageStatus {
     return this._status;
+  }
+
+  public set status(val: EquipmentUsageStatus) {
+    this._status = val;
+  }
+
+  public toJSON(): Record<string, any> {
+    return {
+      id: this.id,
+      equipmentType: this.equipmentType,
+      equipmentNumber: this.equipmentNumber,
+      workerId: this.workerId,
+      workerName: this.workerName,
+      purpose: this.purpose,
+      startTime: this.startTime,
+      endTime: this.endTime,
+      location: this.location,
+      hasLicense: this.hasLicense,
+      preCheckCompleted: this.preCheckCompleted,
+      status: this._status,
+      _status: this._status,
+      approvedBy: this.approvedBy,
+      approvedAt: this.approvedAt,
+      rejectReason: this.rejectReason,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    };
   }
 
   public approve(adminName: string): void {

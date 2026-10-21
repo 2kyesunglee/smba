@@ -90,7 +90,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const approveWorker = (id: string) => store.approveWorker(id);
   const addWorker = (data: Partial<WorkerProps>) => {
     const newWorker = Worker.create({
-      id: 'w-' + Date.now(),
+      id: data.id || ('w-' + Date.now()),
       name: data.name || 'New Worker',
       koreanName: data.koreanName,
       alienRegNumber: data.alienRegNumber || '000000-0000000',
@@ -104,6 +104,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       contractEndDate: data.contractEndDate || '2027-12-31',
       departureDate: data.departureDate,
       specialHealthCheckDate: data.specialHealthCheckDate,
+      status: data.status || 'PENDING_APPROVAL',
+      password: data.password,
     });
     store.addWorker(newWorker);
   };
