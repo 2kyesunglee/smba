@@ -16,16 +16,32 @@ import {
   Settings,
   Radio,
   FileSignature,
+  User,
+  KeyRound,
+  LogOut,
+  Lock,
 } from 'lucide-react';
+import { AdminAuthService } from '@/infrastructure/services/AdminAuthService';
 
 interface HeaderProps {
   onOpenMobileView: () => void;
+  onLogout?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenMobileView, onLogout }) => {
   const { notifications, pendingPTWCount, pendingWorkerCount, hasActiveSOS } = useAppStore();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInstallModal, setShowInstallModal] = useState(false);
+
+  // Admin Change Password Modal State
+  const [showChangePwModal, setShowChangePwModal] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [newPwConfirm, setNewPwConfirm] = useState('');
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+
+  const authService = new AdminAuthService();
 
   // Target Server Base URL (defaults to Vercel production server)
   const [baseUrl, setBaseUrl] = useState('https://smba-one.vercel.app');
@@ -167,7 +183,157 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView }) => {
             </div>
           )}
         </div>
+
+        {/* Administrator Profile & Settings */}
+        <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+          <button
+            onClick={() => setShowChangePwModal(true)}
+            className="btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-slate-700 hover:text-blue-600 hover:border-blue-300"
+            title="관리자 비밀번호 변경"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-blue-600" />
+            <span className="hidden sm:inline font-bold">비번 변경</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (confirm('관리자 세션에서 로그아웃 하시겠습니까?')) {
+                authService.logout();
+                if (onLogout) onLogout();
+              }
+            }}
+            className="btn-secondary text-xs py-1.5 px-2.5 flex items-center gap-1.5 text-slate-500 hover:text-red-600 hover:border-red-300"
+            title="관리자 로그아웃"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">로그아웃</span>
+          </button>
+        </div>
       </div>
+
+      {/* Modal: Change Password Modal */}
+      {showChangePwModal && (
+        <div className="modal-overlay">
+          <div className="modal-content p-6 space-y-4 max-w-md bg-white border border-slate-200 shadow-2xl rounded-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-blue-600" />
+                관리자 비밀번호 변경
+              </h3>
+              <button
+                onClick={() => {
+                  setShowChangePwModal(false);
+                  setPwError(null);
+                  setPwSuccess(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              현재 관리자 ID는 <strong className="font-mono text-slate-800">admin</strong> 입니다. 안전한 비밀번호로 변경해주세요.
+            </p>
+
+            {pwError && (
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+                {pwError}
+              </div>
+            )}
+
+            {pwSuccess && (
+              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-medium flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span>{pwSuccess}</span>
+              </div>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setPwError(null);
+                setPwSuccess(null);
+
+                if (newPw !== newPwConfirm) {
+                  setPwError('새 비밀번호와 확인이 일치하지 않습니다.');
+                  return;
+                }
+
+                const res = authService.changePassword('admin', currentPw, newPw);
+                if (res.success) {
+                  setPwSuccess(res.message);
+                  setCurrentPw('');
+                  setNewPw('');
+                  setNewPwConfirm('');
+                  setTimeout(() => {
+                    setShowChangePwModal(false);
+                    setPwSuccess(null);
+                  }, 1500);
+                } else {
+                  setPwError(res.message);
+                }
+              }}
+              className="space-y-3 pt-1"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  현재 비밀번호 (최초: 1004) *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={currentPw}
+                  onChange={(e) => setCurrentPw(e.target.value)}
+                  placeholder="현재 비밀번호 입력"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  새 비밀번호 (4자리 이상) *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  placeholder="새 비밀번호 입력"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  새 비밀번호 확인 *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newPwConfirm}
+                  onChange={(e) => setNewPwConfirm(e.target.value)}
+                  placeholder="새 비밀번호 다시 입력"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowChangePwModal(false)}
+                  className="btn-secondary text-xs"
+                >
+                  취소
+                </button>
+                <button type="submit" className="btn-primary text-xs">
+                  비밀번호 변경 완료
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Smartphone App Installation & QR Code Pairing */}
       {showInstallModal && (

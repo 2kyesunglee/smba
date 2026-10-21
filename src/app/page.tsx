@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SOSAlertBar } from '@/presentation/components/common/SOSAlertBar';
 import { Header } from '@/presentation/components/common/Header';
 import { Sidebar, ActiveTab } from '@/presentation/components/common/Sidebar';
@@ -10,10 +10,31 @@ import { SafetyHealthView } from '@/presentation/components/safety/SafetyHealthV
 import { EquipmentProcessView } from '@/presentation/components/equipment/EquipmentProcessView';
 import { ComplianceExportView } from '@/presentation/components/compliance/ComplianceExportView';
 import { WorkerMobileSimulator } from '@/presentation/components/mobile/WorkerMobileSimulator';
+import { AdminLoginView } from '@/presentation/components/auth/AdminLoginView';
+import { AdminAuthService } from '@/infrastructure/services/AdminAuthService';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isMobileSimulatorOpen, setIsMobileSimulatorOpen] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const authService = new AdminAuthService();
+    const session = authService.getSession();
+    setIsAdminLoggedIn(!!session);
+  }, []);
+
+  if (isAdminLoggedIn === false) {
+    return <AdminLoginView onLoginSuccess={() => setIsAdminLoggedIn(true)} />;
+  }
+
+  if (isAdminLoggedIn === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white font-medium text-sm">
+        관리자 보안 세션 확인 중...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F1F5F9] text-slate-800">
@@ -21,7 +42,10 @@ export default function Home() {
       <SOSAlertBar />
 
       {/* 2. Global Navigation Bar */}
-      <Header onOpenMobileView={() => setIsMobileSimulatorOpen(true)} />
+      <Header
+        onOpenMobileView={() => setIsMobileSimulatorOpen(true)}
+        onLogout={() => setIsAdminLoggedIn(false)}
+      />
 
       {/* 3. Main Body: Sidebar + Dynamic Content Page */}
       <div className="flex-1 flex overflow-hidden">

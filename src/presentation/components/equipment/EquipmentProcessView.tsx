@@ -33,6 +33,7 @@ import {
   Settings2,
   Activity,
   Trash2,
+  Camera,
 } from 'lucide-react';
 
 export const EquipmentProcessView: React.FC = () => {
@@ -59,6 +60,76 @@ export const EquipmentProcessView: React.FC = () => {
   const [reportSearchTerm, setReportSearchTerm] = useState('');
   const [reportDateFilter, setReportDateFilter] = useState('');
   const [galleryViewMode, setGalleryViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Work Report Create Modal State (Request #7: Before 2장, After 2장 등록)
+  const [isCreateReportModalOpen, setIsCreateReportModalOpen] = useState(false);
+  const [newReportForm, setNewReportForm] = useState({
+    taskName: '',
+    location: '',
+    workerId: 'w-1',
+    workerName: 'Nguyen Van An',
+    beforeImg1: '',
+    beforeImg2: '',
+    afterImg1: '',
+    afterImg2: '',
+    beforeDescription: '',
+    afterDescription: '',
+    description: '',
+  });
+
+  const handleWebReportImageUpload = (
+    field: 'beforeImg1' | 'beforeImg2' | 'afterImg1' | 'afterImg2',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          setNewReportForm((prev) => ({ ...prev, [field]: ev.target?.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCreateWebReportSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReportForm.taskName.trim()) {
+      alert('작업 명칭을 입력해주세요.');
+      return;
+    }
+
+    const defaultWorker = workers.find((w) => w.id === newReportForm.workerId) || workers[0];
+
+    submitWorkReport(
+      newReportForm.taskName,
+      newReportForm.location || '생산 현장 1구역',
+      newReportForm.beforeImg1 || 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
+      newReportForm.afterImg1 || 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
+      newReportForm.description || newReportForm.afterDescription || '작업 완료 및 안전 점검 완료함.',
+      [newReportForm.beforeImg1, newReportForm.beforeImg2].filter(Boolean),
+      [newReportForm.afterImg1, newReportForm.afterImg2].filter(Boolean),
+      newReportForm.beforeDescription,
+      newReportForm.afterDescription
+    );
+
+    setIsCreateReportModalOpen(false);
+    setNewReportForm({
+      taskName: '',
+      location: '',
+      workerId: 'w-1',
+      workerName: defaultWorker?.name || 'Nguyen Van An',
+      beforeImg1: '',
+      beforeImg2: '',
+      afterImg1: '',
+      afterImg2: '',
+      beforeDescription: '',
+      afterDescription: '',
+      description: '',
+    });
+    alert('🎉 작업 완료 보고서(Before 2장, After 2장)가 성공적으로 등록되었습니다.');
+  };
 
   // Request #6: Inspection Target Form Modal
   const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
@@ -381,26 +452,36 @@ export const EquipmentProcessView: React.FC = () => {
               </div>
             </div>
 
-            {/* Toggle Grid vs List (Request #4) */}
-            <div className="flex items-center gap-1 p-1 bg-[#F5F5F7] rounded-xl border border-black/5">
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setGalleryViewMode('grid')}
-                className={`p-1.5 rounded-lg text-xs flex items-center gap-1 font-semibold transition-colors ${
-                  galleryViewMode === 'grid' ? 'bg-white shadow-sm text-[#1D1D1F]' : 'text-[#6E6E73]'
-                }`}
+                onClick={() => setIsCreateReportModalOpen(true)}
+                className="btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm bg-[#0071E3] hover:bg-blue-600"
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>갤러리 뷰</span>
+                <Plus className="w-4 h-4" />
+                <span>+ 작업 보고서 등록 (사진 4장)</span>
               </button>
-              <button
-                onClick={() => setGalleryViewMode('list')}
-                className={`p-1.5 rounded-lg text-xs flex items-center gap-1 font-semibold transition-colors ${
-                  galleryViewMode === 'list' ? 'bg-white shadow-sm text-[#1D1D1F]' : 'text-[#6E6E73]'
-                }`}
-              >
-                <List className="w-3.5 h-3.5" />
-                <span>리스트 뷰</span>
-              </button>
+
+              {/* Toggle Grid vs List (Request #4) */}
+              <div className="flex items-center gap-1 p-1 bg-[#F5F5F7] rounded-xl border border-black/5">
+                <button
+                  onClick={() => setGalleryViewMode('grid')}
+                  className={`p-1.5 rounded-lg text-xs flex items-center gap-1 font-semibold transition-colors ${
+                    galleryViewMode === 'grid' ? 'bg-white shadow-sm text-[#1D1D1F]' : 'text-[#6E6E73]'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>갤러리 뷰</span>
+                </button>
+                <button
+                  onClick={() => setGalleryViewMode('list')}
+                  className={`p-1.5 rounded-lg text-xs flex items-center gap-1 font-semibold transition-colors ${
+                    galleryViewMode === 'list' ? 'bg-white shadow-sm text-[#1D1D1F]' : 'text-[#6E6E73]'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>리스트 뷰</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -414,6 +495,8 @@ export const EquipmentProcessView: React.FC = () => {
               ) : (
                 filteredWorkReports.map((report) => {
                   const translatedDesc = translationService.translateToKorean(report.description);
+                  const beforeList = report.beforeImgs && report.beforeImgs.length > 0 ? report.beforeImgs : [report.beforeImg].filter(Boolean);
+                  const afterList = report.afterImgs && report.afterImgs.length > 0 ? report.afterImgs : [report.afterImg].filter(Boolean);
 
                   return (
                     <div key={report.id} className="glass-card p-5 space-y-4">
@@ -430,53 +513,79 @@ export const EquipmentProcessView: React.FC = () => {
                         <span className="font-mono text-xs text-[#86868B]">{report.reportedAt}</span>
                       </div>
 
-                      {/* Before / After Photo Comparison with Individual Download (Request #4) */}
-                      <div className="grid grid-cols-2 gap-3">
-                        {/* BEFORE Box */}
-                        <div className="space-y-1.5">
+                      {/* Before / After Photo Comparison (Request #7: Before 2장, After 2장 총 4장 갤러리 뷰) */}
+                      <div className="grid grid-cols-2 gap-3.5">
+                        {/* BEFORE Box (작업 전 2장) */}
+                        <div className="space-y-2 p-3 bg-red-50/50 rounded-2xl border border-red-200/60">
                           <div className="flex items-center justify-between">
-                            <span className="badge badge-red text-[10px] font-bold">BEFORE (작업 전)</span>
-                            <button
-                              onClick={() => handleDownloadImage(report.beforeImg, `Before_${report.taskName}.jpg`)}
-                              className="text-[10px] text-[#0071E3] hover:underline flex items-center gap-0.5 font-medium"
-                              title="사진 다운로드"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>다운로드</span>
-                            </button>
+                            <span className="badge badge-red text-[10px] font-bold">
+                              BEFORE (작업 전 {beforeList.length}장)
+                            </span>
                           </div>
-                          <img
-                            src={report.beforeImg}
-                            alt="Before"
-                            className="w-full h-36 object-cover rounded-xl border border-red-200 shadow-sm"
-                          />
+
+                          <div className="grid grid-cols-2 gap-2">
+                            {beforeList.map((imgUrl, idx) => (
+                              <div key={idx} className="space-y-1">
+                                <img
+                                  src={imgUrl}
+                                  alt={`Before ${idx + 1}`}
+                                  className="w-full h-28 object-cover rounded-xl border border-red-200 shadow-sm"
+                                />
+                                <div className="flex items-center justify-between px-0.5">
+                                  <span className="text-[9px] font-bold text-red-700 font-mono">사진 #{idx + 1}</span>
+                                  <button
+                                    onClick={() => handleDownloadImage(imgUrl, `Before_${report.taskName}_${idx + 1}.jpg`)}
+                                    className="text-[9px] text-[#0071E3] hover:underline flex items-center gap-0.5 font-medium"
+                                    title="사진 다운로드"
+                                  >
+                                    <Download className="w-2.5 h-2.5" />
+                                    <span>저장</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
                           {report.beforeDescription && (
-                            <div className="p-2 bg-red-50/70 border border-red-200/60 rounded-xl text-[11px] text-red-900 leading-snug">
+                            <div className="p-2 bg-red-100/70 border border-red-200 rounded-xl text-[11px] text-red-950 leading-snug">
                               <strong>문제점:</strong> {report.beforeDescription}
                             </div>
                           )}
                         </div>
 
-                        {/* AFTER Box */}
-                        <div className="space-y-1.5">
+                        {/* AFTER Box (작업 후 2장) */}
+                        <div className="space-y-2 p-3 bg-emerald-50/50 rounded-2xl border border-emerald-200/60">
                           <div className="flex items-center justify-between">
-                            <span className="badge badge-green text-[10px] font-bold">AFTER (개선 후)</span>
-                            <button
-                              onClick={() => handleDownloadImage(report.afterImg, `After_${report.taskName}.jpg`)}
-                              className="text-[10px] text-[#0071E3] hover:underline flex items-center gap-0.5 font-medium"
-                              title="사진 다운로드"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>다운로드</span>
-                            </button>
+                            <span className="badge badge-green text-[10px] font-bold">
+                              AFTER (개선 후 {afterList.length}장)
+                            </span>
                           </div>
-                          <img
-                            src={report.afterImg}
-                            alt="After"
-                            className="w-full h-36 object-cover rounded-xl border border-emerald-200 shadow-sm"
-                          />
+
+                          <div className="grid grid-cols-2 gap-2">
+                            {afterList.map((imgUrl, idx) => (
+                              <div key={idx} className="space-y-1">
+                                <img
+                                  src={imgUrl}
+                                  alt={`After ${idx + 1}`}
+                                  className="w-full h-28 object-cover rounded-xl border border-emerald-200 shadow-sm"
+                                />
+                                <div className="flex items-center justify-between px-0.5">
+                                  <span className="text-[9px] font-bold text-emerald-700 font-mono">사진 #{idx + 1}</span>
+                                  <button
+                                    onClick={() => handleDownloadImage(imgUrl, `After_${report.taskName}_${idx + 1}.jpg`)}
+                                    className="text-[9px] text-[#0071E3] hover:underline flex items-center gap-0.5 font-medium"
+                                    title="사진 다운로드"
+                                  >
+                                    <Download className="w-2.5 h-2.5" />
+                                    <span>저장</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
                           {report.afterDescription && (
-                            <div className="p-2 bg-emerald-50/70 border border-emerald-200/60 rounded-xl text-[11px] text-emerald-900 leading-snug">
+                            <div className="p-2 bg-emerald-100/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-950 leading-snug">
                               <strong>개선완료:</strong> {report.afterDescription}
                             </div>
                           )}
@@ -1058,6 +1167,222 @@ export const EquipmentProcessView: React.FC = () => {
                 </button>
                 <button type="submit" className="btn-primary text-xs">
                   점검 대상 저장 및 모바일 배포
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: 신규 작업 완료 보고서 등록 (Request #7: Before 2장, After 2장 등록 모달) */}
+      {isCreateReportModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content p-7 space-y-4 max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-black/5">
+              <h3 className="text-base font-bold text-[#1D1D1F] flex items-center gap-2">
+                <Camera className="w-5 h-5 text-[#0071E3]" />
+                신규 작업 완료 보고서 등록 (Before & After 사진 4장)
+              </h3>
+              <button
+                onClick={() => setIsCreateReportModalOpen(false)}
+                className="text-[#86868B] hover:text-[#1D1D1F]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateWebReportSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="text-xs font-bold text-[#1D1D1F] block mb-1">작업 명칭 *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="예: 밸브 패킹 교체 및 누설 차단"
+                    value={newReportForm.taskName}
+                    onChange={(e) => setNewReportForm({ ...newReportForm, taskName: e.target.value })}
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#1D1D1F] block mb-1">작업 위치</label>
+                  <input
+                    type="text"
+                    placeholder="예: A동 화학탱크 라인"
+                    value={newReportForm.location}
+                    onChange={(e) => setNewReportForm({ ...newReportForm, location: e.target.value })}
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#1D1D1F] block mb-1">작업 근로자</label>
+                  <select
+                    value={newReportForm.workerId}
+                    onChange={(e) => {
+                      const sel = workers.find((w) => w.id === e.target.value);
+                      setNewReportForm({
+                        ...newReportForm,
+                        workerId: e.target.value,
+                        workerName: sel?.name || '근로자',
+                      });
+                    }}
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F]"
+                  >
+                    {workers.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.nationality})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* BEFORE SECTION (2장 업로드) */}
+              <div className="p-3.5 bg-red-50/60 rounded-2xl border border-red-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-red-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                    BEFORE (작업 전 사진 2장)
+                  </span>
+                  <span className="text-[10px] text-red-600">내 PC에서 사진 2장 선택</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {/* Before Img 1 */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-700 block">사진 #1</label>
+                    <div className="relative border-2 border-dashed border-red-200 bg-white rounded-xl p-2 text-center h-28 flex flex-col items-center justify-center overflow-hidden">
+                      {newReportForm.beforeImg1 ? (
+                        <img src={newReportForm.beforeImg1} alt="Before 1" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <div className="space-y-1 text-slate-400">
+                          <Upload className="w-5 h-5 mx-auto text-red-400" />
+                          <span className="text-[10px] block font-medium">사진 1 선택</span>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleWebReportImageUpload('beforeImg1', e)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Before Img 2 */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-700 block">사진 #2</label>
+                    <div className="relative border-2 border-dashed border-red-200 bg-white rounded-xl p-2 text-center h-28 flex flex-col items-center justify-center overflow-hidden">
+                      {newReportForm.beforeImg2 ? (
+                        <img src={newReportForm.beforeImg2} alt="Before 2" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <div className="space-y-1 text-slate-400">
+                          <Upload className="w-5 h-5 mx-auto text-red-400" />
+                          <span className="text-[10px] block font-medium">사진 2 선택</span>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleWebReportImageUpload('beforeImg2', e)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-red-900 block mb-1">
+                    Before 문제점 상세 설명
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: 고온 증기 누설 및 배관 플랜지 부식 발생"
+                    value={newReportForm.beforeDescription}
+                    onChange={(e) => setNewReportForm({ ...newReportForm, beforeDescription: e.target.value })}
+                    className="w-full bg-white border border-red-200 rounded-xl p-2 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              {/* AFTER SECTION (2장 업로드) */}
+              <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-emerald-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                    AFTER (작업 후 사진 2장)
+                  </span>
+                  <span className="text-[10px] text-emerald-700">내 PC에서 사진 2장 선택</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  {/* After Img 1 */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-700 block">사진 #1</label>
+                    <div className="relative border-2 border-dashed border-emerald-200 bg-white rounded-xl p-2 text-center h-28 flex flex-col items-center justify-center overflow-hidden">
+                      {newReportForm.afterImg1 ? (
+                        <img src={newReportForm.afterImg1} alt="After 1" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <div className="space-y-1 text-slate-400">
+                          <Upload className="w-5 h-5 mx-auto text-emerald-500" />
+                          <span className="text-[10px] block font-medium">사진 1 선택</span>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleWebReportImageUpload('afterImg1', e)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* After Img 2 */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-700 block">사진 #2</label>
+                    <div className="relative border-2 border-dashed border-emerald-200 bg-white rounded-xl p-2 text-center h-28 flex flex-col items-center justify-center overflow-hidden">
+                      {newReportForm.afterImg2 ? (
+                        <img src={newReportForm.afterImg2} alt="After 2" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <div className="space-y-1 text-slate-400">
+                          <Upload className="w-5 h-5 mx-auto text-emerald-500" />
+                          <span className="text-[10px] block font-medium">사진 2 선택</span>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleWebReportImageUpload('afterImg2', e)}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-emerald-950 block mb-1">
+                    After 개선 조치 상세 설명
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="예: 내열 테플론 패킹 교체 및 기밀 누설 테스트 합격 완료"
+                    value={newReportForm.afterDescription}
+                    onChange={(e) => setNewReportForm({ ...newReportForm, afterDescription: e.target.value })}
+                    className="w-full bg-white border border-emerald-200 rounded-xl p-2 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-black/5">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateReportModalOpen(false)}
+                  className="btn-secondary text-xs"
+                >
+                  취소
+                </button>
+                <button type="submit" className="btn-primary text-xs">
+                  작업 완료 보고서 등록
                 </button>
               </div>
             </form>

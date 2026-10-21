@@ -655,27 +655,36 @@ const INITIAL_INSPECTION_TARGETS: InspectionTarget[] = [
   },
 ];
 
+const STORAGE_KEY_STATE = 'smba_store_state_v2';
+
 export class LocalStateStore {
   private static instance: LocalStateStore;
   private state: StoreState;
   private listeners: Set<() => void> = new Set();
+  private isStorageListenerAttached = false;
 
   private constructor() {
-    this.state = {
-      workers: INITIAL_WORKERS,
-      equipmentList: INITIAL_EQUIPMENT,
-      templates: INITIAL_TEMPLATES,
-      ptwList: INITIAL_PTW,
-      sosList: INITIAL_SOS,
-      inspections: INITIAL_INSPECTIONS,
-      workReports: INITIAL_WORK_REPORTS,
+    this.state = this.getInitialState();
+    this.loadFromStorage();
+    this.setupStorageListener();
+  }
+
+  private getInitialState(): StoreState {
+    return {
+      workers: [...INITIAL_WORKERS],
+      equipmentList: [...INITIAL_EQUIPMENT],
+      templates: [...INITIAL_TEMPLATES],
+      ptwList: [...INITIAL_PTW],
+      sosList: [...INITIAL_SOS],
+      inspections: [...INITIAL_INSPECTIONS],
+      workReports: [...INITIAL_WORK_REPORTS],
       signatures: [],
-      documents: INITIAL_DOCUMENTS,
-      safetyMaterials: INITIAL_MATERIALS,
-      pushHistories: INITIAL_PUSH_HISTORIES,
-      equipmentUsageLogs: INITIAL_EQUIPMENT_USAGE_LOGS,
-      equipmentTypes: INITIAL_EQUIPMENT_TYPES,
-      inspectionTargets: INITIAL_INSPECTION_TARGETS,
+      documents: [...INITIAL_DOCUMENTS],
+      safetyMaterials: [...INITIAL_MATERIALS],
+      pushHistories: [...INITIAL_PUSH_HISTORIES],
+      equipmentUsageLogs: [...INITIAL_EQUIPMENT_USAGE_LOGS],
+      equipmentTypes: [...INITIAL_EQUIPMENT_TYPES],
+      inspectionTargets: [...INITIAL_INSPECTION_TARGETS],
       notifications: [
         {
           id: 'notif-1',
@@ -702,6 +711,131 @@ export class LocalStateStore {
     };
   }
 
+  public resetToInitial(): void {
+    this.state = this.getInitialState();
+    if (this.isStorageAvailable()) {
+      window.localStorage.removeItem(STORAGE_KEY_STATE);
+    }
+    this.notify();
+  }
+
+  private isStorageAvailable(): boolean {
+    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  }
+
+  private setupStorageListener(): void {
+    if (this.isStorageListenerAttached || typeof window === 'undefined') return;
+    try {
+      window.addEventListener('storage', (event) => {
+        if (event.key === STORAGE_KEY_STATE) {
+          this.loadFromStorage();
+          this.notifyListenersOnly();
+        }
+      });
+      this.isStorageListenerAttached = true;
+    } catch {
+      // ignore
+    }
+  }
+
+  public loadFromStorage(): void {
+    if (!this.isStorageAvailable()) return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY_STATE);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+
+      if (parsed.workers && Array.isArray(parsed.workers)) {
+        this.state.workers = parsed.workers.map((w: any) => Worker.create(w));
+      }
+      if (parsed.ptwList && Array.isArray(parsed.ptwList)) {
+        this.state.ptwList = parsed.ptwList.map((p: any) => PTWRequest.create(p));
+      }
+      if (parsed.equipmentUsageLogs && Array.isArray(parsed.equipmentUsageLogs)) {
+        this.state.equipmentUsageLogs = parsed.equipmentUsageLogs.map((l: any) => EquipmentUsageLog.create(l));
+      }
+      if (parsed.inspections && Array.isArray(parsed.inspections)) {
+        this.state.inspections = parsed.inspections.map((i: any) => Inspection.create(i));
+      }
+      if (parsed.sosList && Array.isArray(parsed.sosList)) {
+        this.state.sosList = parsed.sosList.map((s: any) => SOSAlert.create(s));
+      }
+      if (parsed.workReports && Array.isArray(parsed.workReports)) {
+        this.state.workReports = parsed.workReports.map((r: any) => new WorkReport(r));
+      }
+      if (parsed.safetyMaterials && Array.isArray(parsed.safetyMaterials)) {
+        this.state.safetyMaterials = parsed.safetyMaterials;
+      }
+      if (parsed.equipmentTypes && Array.isArray(parsed.equipmentTypes)) {
+        this.state.equipmentTypes = parsed.equipmentTypes;
+      }
+      if (parsed.inspectionTargets && Array.isArray(parsed.inspectionTargets)) {
+        this.state.inspectionTargets = parsed.inspectionTargets;
+      }
+      if (parsed.pushHistories && Array.isArray(parsed.pushHistories)) {
+        this.state.pushHistories = parsed.pushHistories;
+      }
+      if (parsed.documents && Array.isArray(parsed.documents)) {
+        this.state.documents = parsed.documents;
+      }
+      if (parsed.notifications && Array.isArray(parsed.notifications)) {
+        this.state.notifications = parsed.notifications;
+      }
+      if (parsed.activeWorkerId) {
+        this.state.activeWorkerId = parsed.activeWorkerId;
+      }
+    } catch {
+      // storage parsing error, keep memory state
+    }
+  }
+
+  public saveToStorage(): void {
+    if (!this.isStorageAvailable()) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(this.state));
+      // Optional async server-side sync for different devices (smartphone <-> PC)
+      if (typeof fetch !== 'undefined') {
+        fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.state),
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  public async fetchFromServer(): Promise<void> {
+    if (typeof fetch === 'undefined') return;
+    try {
+      const res = await fetch('/api/sync');
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success && json.data) {
+        const parsed = json.data;
+        if (parsed.workers && Array.isArray(parsed.workers)) {
+          this.state.workers = parsed.workers.map((w: any) => Worker.create(w));
+        }
+        if (parsed.ptwList && Array.isArray(parsed.ptwList)) {
+          this.state.ptwList = parsed.ptwList.map((p: any) => PTWRequest.create(p));
+        }
+        if (parsed.equipmentUsageLogs && Array.isArray(parsed.equipmentUsageLogs)) {
+          this.state.equipmentUsageLogs = parsed.equipmentUsageLogs.map((l: any) => EquipmentUsageLog.create(l));
+        }
+        if (parsed.workReports && Array.isArray(parsed.workReports)) {
+          this.state.workReports = parsed.workReports.map((r: any) => new WorkReport(r));
+        }
+        if (parsed.safetyMaterials && Array.isArray(parsed.safetyMaterials)) {
+          this.state.safetyMaterials = parsed.safetyMaterials;
+        }
+        this.saveToStorage();
+        this.notifyListenersOnly();
+      }
+    } catch {
+      // offline or server not ready
+    }
+  }
 
   public static getInstance(): LocalStateStore {
     if (!LocalStateStore.instance) {
@@ -720,6 +854,11 @@ export class LocalStateStore {
   }
 
   private notify() {
+    this.saveToStorage();
+    this.notifyListenersOnly();
+  }
+
+  private notifyListenersOnly() {
     this.listeners.forEach((listener) => listener());
   }
 

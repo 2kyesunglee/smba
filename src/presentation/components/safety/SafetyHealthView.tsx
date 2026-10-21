@@ -79,14 +79,42 @@ export const SafetyHealthView: React.FC = () => {
   // Material Upload Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [materialUploadType, setMaterialUploadType] = useState<'SAFETY_EDUCATION' | 'TBM'>('SAFETY_EDUCATION');
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [newMaterialForm, setNewMaterialForm] = useState({
     title: '',
     category: '정기안전교육',
-    fileName: '안전보건교육교안.pdf',
-    fileSize: '3.4 MB',
+    fileName: '',
+    fileSize: '',
     description: '',
     targetDepartment: '전 생산라인 및 정비팀',
   });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const sizeStr =
+        file.size > 1024 * 1024
+          ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+          : (file.size / 1024).toFixed(0) + ' KB';
+
+      const defaultTitle = file.name.replace(/\.[^/.]+$/, '');
+      setNewMaterialForm((prev) => ({
+        ...prev,
+        fileName: file.name,
+        fileSize: sizeStr,
+        title: prev.title ? prev.title : defaultTitle,
+      }));
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setUploadedFileUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Reading & Signing Modal State
   const [readingMaterial, setReadingMaterial] = useState<SafetyMaterial | null>(null);
@@ -156,14 +184,18 @@ export const SafetyHealthView: React.FC = () => {
       return;
     }
 
+    const finalFileName = newMaterialForm.fileName || '안전교육교안_자료.pdf';
+    const finalFileSize = newMaterialForm.fileSize || '3.5 MB';
+
     const item: SafetyMaterial = {
       id: 'mat-' + Date.now(),
       type: materialUploadType,
       title: newMaterialForm.title,
       category: newMaterialForm.category,
-      fileName: newMaterialForm.fileName,
-      fileSize: newMaterialForm.fileSize,
-      description: newMaterialForm.description || '산업안전보건법 기준 현장 작업자 필수 이수 교안',
+      fileName: finalFileName,
+      fileSize: finalFileSize,
+      pdfUrl: uploadedFileUrl || undefined,
+      description: newMaterialForm.description || '산업안전보건법 기준 현장 작업자 필수 이수 교안 (안전 수칙 및 보호구 착용법)',
       targetDepartment: newMaterialForm.targetDepartment,
       uploadedAt: new Date().toISOString().split('T')[0],
       uploadedBy: '김공장장 (안전총괄)',
@@ -172,15 +204,16 @@ export const SafetyHealthView: React.FC = () => {
 
     addSafetyMaterial(item);
     setIsUploadModalOpen(false);
+    setUploadedFileUrl(null);
     setNewMaterialForm({
       title: '',
       category: materialUploadType === 'SAFETY_EDUCATION' ? '정기안전교육' : '위험공정 TBM',
-      fileName: '안전보건교육교안.pdf',
-      fileSize: '3.4 MB',
+      fileName: '',
+      fileSize: '',
       description: '',
       targetDepartment: '전 생산라인 및 정비팀',
     });
-    alert(`[PDF 교안 등록 완료] ${item.title} 교안이 등록되었습니다.`);
+    alert(`[PC 파일 교안 등록 완료]\n\n제목: ${item.title}\n파일명: ${item.fileName} (${item.fileSize})\n관리자 및 근로자 스마트폰으로 즉시 배포되었습니다.`);
   };
 
   // Add Equipment Tab (Request #7)
@@ -1215,6 +1248,50 @@ export const SafetyHealthView: React.FC = () => {
             </div>
 
             <form onSubmit={handleMaterialUploadSubmit} className="space-y-4">
+              {/* PC File Upload Dropzone */}
+              <div>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1.5">
+                  내 PC에서 교안 파일 올리기 *
+                </label>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.hwp,.hwpx,.png,.jpg,.jpeg"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-blue-400/60 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-500 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-[#0071E3] text-white flex items-center justify-center mx-auto shadow-md group-hover:scale-105 transition-transform">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#1D1D1F]">
+                      {newMaterialForm.fileName ? (
+                        <span className="text-[#0071E3] font-bold">
+                          선택된 파일: {newMaterialForm.fileName} ({newMaterialForm.fileSize})
+                        </span>
+                      ) : (
+                        <span>클릭하여 내 PC의 교안 파일 선택 (또는 파일 끌어다 놓기)</span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-[#86868B] mt-0.5">
+                      지원 형식: PDF, HWP, DOCX, PPTX, JPG, PNG (최대 50MB)
+                    </p>
+                  </div>
+
+                  {newMaterialForm.fileName && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-bold">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>파일 로드 완료 (등록 준비됨)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-[#1D1D1F] block mb-1">교안 제목 *</label>
                 <input
@@ -1223,7 +1300,7 @@ export const SafetyHealthView: React.FC = () => {
                   placeholder="예: 2026년 하반기 유해화학물질 취급 안전 특별교육"
                   value={newMaterialForm.title}
                   onChange={(e) => setNewMaterialForm({ ...newMaterialForm, title: e.target.value })}
-                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F]"
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F] focus:bg-white focus:border-[#0071E3]"
                 />
               </div>
 
@@ -1234,7 +1311,7 @@ export const SafetyHealthView: React.FC = () => {
                     type="text"
                     value={newMaterialForm.category}
                     onChange={(e) => setNewMaterialForm({ ...newMaterialForm, category: e.target.value })}
-                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-[#1D1D1F]"
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F] focus:bg-white focus:border-[#0071E3]"
                   />
                 </div>
                 <div>
@@ -1243,18 +1320,19 @@ export const SafetyHealthView: React.FC = () => {
                     type="text"
                     value={newMaterialForm.targetDepartment}
                     onChange={(e) => setNewMaterialForm({ ...newMaterialForm, targetDepartment: e.target.value })}
-                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-[#1D1D1F]"
+                    className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F] focus:bg-white focus:border-[#0071E3]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">교안 상세 설명</label>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">교안 상세 설명 및 주요 수칙</label>
                 <textarea
                   rows={2}
+                  placeholder="교육의 주요 위험 요인과 필수 안전 수칙을 입력하세요. (근로자 모국어로 자동 번역 제공)"
                   value={newMaterialForm.description}
                   onChange={(e) => setNewMaterialForm({ ...newMaterialForm, description: e.target.value })}
-                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F]"
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F] focus:bg-white focus:border-[#0071E3]"
                 />
               </div>
 
@@ -1267,7 +1345,7 @@ export const SafetyHealthView: React.FC = () => {
                   취소
                 </button>
                 <button type="submit" className="btn-primary text-xs">
-                  교안 등록 저장
+                  내 PC 교안 등록 저장
                 </button>
               </div>
             </form>

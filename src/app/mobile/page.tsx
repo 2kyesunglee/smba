@@ -47,21 +47,37 @@ export default function MobileWorkerPage() {
     inspectionTargets,
     requestEquipmentUsage,
     addWorker,
+    safetyMaterials,
+    signSafetyMaterial,
   } = useAppStore();
 
   const translationService = new MultiLanguageTranslationService();
 
-  // Login / Auth State (Request #2)
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  // Login / Auth State (Request #1: 최초 접속 시 미로그인 상태로 로그인 창 표시)
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isSignUpView, setIsSignUpView] = useState(false);
-  const [loginPhone, setLoginPhone] = useState('010-3456-7890');
-  const [loginPassword, setLoginPassword] = useState('1234');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [signUpForm, setSignUpForm] = useState({
     name: '',
     nationality: 'VN',
     phoneNumber: '',
     password: '',
   });
+
+  // Restore worker login session from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedSession = window.localStorage.getItem('smba_worker_session_v1');
+      if (savedSession) {
+        const found = workers.find((w) => w.id === savedSession);
+        if (found && found.status === 'ACTIVE') {
+          setActiveWorker(savedSession);
+          setIsLoggedIn(true);
+        }
+      }
+    }
+  }, [workers, setActiveWorker]);
 
   // Current worker & language
   const currentWorker = workers.find((w) => w.id === activeWorkerId) || workers[0];
@@ -76,7 +92,14 @@ export default function MobileWorkerPage() {
     }
   }, [currentWorker?.id, currentWorker?.nationality]);
 
-  const [activeTab, setActiveTab] = useState<'instructions' | 'tbm' | 'ptw' | 'equipment_use' | 'inspect' | 'report'>('instructions');
+  // Active Tab: including 'education' (Request #6: 안전교육 교안 & 서명 탭)
+  const [activeTab, setActiveTab] = useState<'instructions' | 'tbm' | 'education' | 'ptw' | 'equipment_use' | 'inspect' | 'report'>('instructions');
+
+  // Education Material Signing State (Request #6)
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
+  const eduCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [isEduDrawing, setIsEduDrawing] = useState(false);
+  const [hasEduSigned, setHasEduSigned] = useState(false);
 
   // 작업 지시 목록
   const [instructions, setInstructions] = useState([
@@ -166,7 +189,7 @@ export default function MobileWorkerPage() {
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const matched = workers.find((w) => w.phoneNumber === loginPhone);
+    const matched = workers.find((w) => w.phoneNumber === loginPhone.trim());
     if (!matched) {
       alert('등록되지 않은 전화번호입니다. 회원가입을 먼저 진행해주세요.');
       return;
@@ -177,7 +200,87 @@ export default function MobileWorkerPage() {
     }
     setActiveWorker(matched.id);
     setIsLoggedIn(true);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('smba_worker_session_v1', matched.id);
+    }
     alert(`[로그인 성공] ${matched.name}님 환영합니다.`);
+  };
+
+  const handleLogout = () => {
+    if (confirm('스마트폰 앱에서 로그아웃 하시겠습니까?')) {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('smba_worker_session_v1');
+      }
+      setIsLoggedIn(false);
+      setLoginPhone('');
+      setLoginPassword('');
+    }
+  };
+
+  // Education Signature Canvas Handlers (Request #6)
+  const startEduDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = eduCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    setIsEduDrawing(true);
+    const rect = canvas.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const drawEdu = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isEduDrawing) return;
+    const canvas = eduCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = 'touches' in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#10B981';
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasEduSigned(true);
+  };
+
+  const stopEduDrawing = () => {
+    setIsEduDrawing(false);
+  };
+
+  const clearEduCanvas = () => {
+    const canvas = eduCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasEduSigned(false);
+  };
+
+  const handleCompleteEduSignature = (materialId: string) => {
+    if (!hasEduSigned) {
+      alert('서명 패드에 서명을 먼저 작성해주세요.');
+      return;
+    }
+    const canvas = eduCanvasRef.current;
+    const dataUrl = canvas ? canvas.toDataURL() : undefined;
+
+    signSafetyMaterial(materialId, {
+      id: 'ms-' + Date.now(),
+      workerId: currentWorker.id,
+      workerName: currentWorker.name,
+      nationality: currentWorker.nationality,
+      signedAt: new Date().toLocaleString(),
+      signatureDataUrl: dataUrl,
+    });
+
+    clearEduCanvas();
+    setSelectedMaterialId('');
+    alert('🎉 [안전교육 교안 전자서약 완료]\n\n안전교육 이수 및 서명이 완료되어 관리자 웹 대시보드로 즉시 전송되었습니다.');
   };
 
   const handleSignUpSubmit = (e: React.FormEvent) => {
@@ -412,11 +515,11 @@ export default function MobileWorkerPage() {
                 ))}
               </select>
               <button
-                onClick={() => setIsLoggedIn(false)}
-                className="text-gray-400 hover:text-white"
+                onClick={handleLogout}
+                className="text-gray-400 hover:text-red-400 p-1"
                 title="로그아웃"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -430,7 +533,7 @@ export default function MobileWorkerPage() {
       {/* 2. Main Body Content */}
       <main className="flex-1 p-4 space-y-4 overflow-y-auto">
         {!isLoggedIn ? (
-          /* Login & Registration Screen (Request #2) */
+          /* Login & Registration Screen (Request #1 & #2) */
           <div className="space-y-4 py-4 text-xs">
             {!isSignUpView ? (
               /* Login */
@@ -443,6 +546,26 @@ export default function MobileWorkerPage() {
                   <p className="text-[11px] text-gray-400">
                     핸드폰 번호(ID)와 비밀번호를 입력해주세요.
                   </p>
+                </div>
+
+                {/* Quick login worker selector chips */}
+                <div className="p-2.5 bg-black/40 rounded-xl border border-white/5 space-y-1.5">
+                  <span className="text-[10px] text-gray-400 font-semibold block">등록 근로자 빠른 선택:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {workers.filter(w => w.status === 'ACTIVE').slice(0, 3).map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => {
+                          setLoginPhone(w.phoneNumber);
+                          setLoginPassword('1234');
+                        }}
+                        className="text-[10px] bg-blue-900/50 hover:bg-blue-800 text-blue-200 px-2 py-1 rounded-lg border border-blue-500/30 font-medium"
+                      >
+                        {w.name} ({w.nationality})
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <form onSubmit={handleLoginSubmit} className="space-y-3">
@@ -658,7 +781,7 @@ export default function MobileWorkerPage() {
               <div className="space-y-4 text-xs bg-[#1C1C1E] p-4 rounded-2xl border border-white/10">
                 <div className="font-bold text-sm text-white flex items-center gap-2">
                   <FileSignature className="w-4 h-4 text-blue-400" />
-                  TBM & 안전교육 교안 모바일 전자서명
+                  일일 TBM 모바일 전자서명
                 </div>
 
                 <div className="p-3 bg-black/50 rounded-xl space-y-2 border border-white/10">
@@ -704,6 +827,155 @@ export default function MobileWorkerPage() {
                   >
                     서명 제출 완료
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab: 안전교육 교안 & 서명 (Request #6) */}
+            {activeTab === 'education' && (
+              <div className="space-y-4 text-xs">
+                <div className="p-3.5 bg-gradient-to-r from-emerald-950/70 to-teal-950/70 border border-emerald-500/30 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-300">
+                    <span className="flex items-center gap-1.5">
+                      <FileCheck2 className="w-4 h-4 text-emerald-400" />
+                      안전교육 교안 열람 및 모바일 전자서명
+                    </span>
+                    <span className="badge badge-green text-[9px]">법정의무교육</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    관리자가 등록한 안전보건 교육 교안을 확인하고, 터치 서명으로 이수 확인 및 안전 서약을 완료합니다.
+                  </p>
+                </div>
+
+                {/* Material List */}
+                <div className="space-y-3">
+                  {safetyMaterials
+                    .filter((m) => m.type === 'SAFETY_EDUCATION')
+                    .map((mat) => {
+                      const mySignature = mat.signatures.find((s) => s.workerId === currentWorker.id);
+                      const isSigned = !!mySignature;
+                      const isSelected = selectedMaterialId === mat.id;
+                      const translatedDesc = translationService.translateInstruction(mat.description, selectedLang);
+
+                      return (
+                        <div
+                          key={mat.id}
+                          className={`p-4 rounded-2xl border transition-all space-y-3 ${
+                            isSigned
+                              ? 'bg-[#1C1C1E]/80 border-emerald-500/30'
+                              : 'bg-[#1C1C1E] border-white/10 shadow-lg'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                                  {mat.category}
+                                </span>
+                                <span className="text-[10px] text-slate-400">등록일: {mat.uploadedAt}</span>
+                              </div>
+                              <h3 className="font-bold text-sm text-white">{mat.title}</h3>
+                              <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                <span>📄 {mat.fileName}</span>
+                                <span>({mat.fileSize})</span>
+                              </p>
+                            </div>
+
+                            {isSigned ? (
+                              <span className="badge badge-green text-[10px] whitespace-nowrap shrink-0">
+                                ✅ 서명 완료
+                              </span>
+                            ) : (
+                              <span className="badge badge-amber text-[10px] whitespace-nowrap shrink-0 animate-pulse">
+                                ⏳ 서명 대기
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Translated summary */}
+                          <div className="p-3 bg-black/50 border border-white/10 rounded-xl space-y-1">
+                            <span className="text-[10px] font-bold text-emerald-400 block">
+                              {langInfo.flag} {langInfo.name} 모국어 요약:
+                            </span>
+                            <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                              {translatedDesc}
+                            </p>
+                          </div>
+
+                          {/* Action Button or Signature Pad */}
+                          {isSigned ? (
+                            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-emerald-400">
+                              <span>서약 완료 일시: {mySignature?.signedAt}</span>
+                              <span className="font-bold">이수 승인됨</span>
+                            </div>
+                          ) : isSelected ? (
+                            <div className="pt-2 border-t border-white/10 space-y-3">
+                              <div className="p-2.5 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-xs text-emerald-200 leading-snug">
+                                <strong>안전 수칙 서약:</strong> 본인은 위 안전보건 교육 교안의 내용을 충분히 숙지하였으며, 현장 작업 시 안전모 착용, 보호구 구비 및 안전 수칙을 철저히 준수할 것을 서약합니다.
+                              </div>
+
+                              <div>
+                                <div className="flex items-center justify-between text-xs text-slate-300 mb-1">
+                                  <span className="font-bold">전자서명 패드:</span>
+                                  <button
+                                    type="button"
+                                    onClick={clearEduCanvas}
+                                    className="text-[11px] text-red-400 hover:underline"
+                                  >
+                                    다시 쓰기
+                                  </button>
+                                </div>
+                                <canvas
+                                  ref={eduCanvasRef}
+                                  width={340}
+                                  height={140}
+                                  onMouseDown={startEduDrawing}
+                                  onMouseMove={drawEdu}
+                                  onMouseUp={stopEduDrawing}
+                                  onTouchStart={startEduDrawing}
+                                  onTouchMove={drawEdu}
+                                  onTouchEnd={stopEduDrawing}
+                                  className="w-full bg-white rounded-xl border-2 border-emerald-400 cursor-crosshair touch-none"
+                                />
+                              </div>
+
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    clearEduCanvas();
+                                    setSelectedMaterialId('');
+                                  }}
+                                  className="btn-secondary text-xs flex-1 justify-center rounded-xl"
+                                >
+                                  닫기 / 취소
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCompleteEduSignature(mat.id)}
+                                  disabled={!hasEduSigned}
+                                  className="btn-primary text-xs flex-1 justify-center bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-bold rounded-xl"
+                                >
+                                  교안 서명 완료 제출
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMaterialId(mat.id);
+                                clearEduCanvas();
+                              }}
+                              className="btn-primary w-full justify-center text-xs py-2.5 bg-emerald-600 hover:bg-emerald-500 font-bold rounded-xl flex items-center gap-1.5"
+                            >
+                              <FileSignature className="w-4 h-4" />
+                              <span>교안 열람 및 전자서약 작성</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -1111,52 +1383,72 @@ export default function MobileWorkerPage() {
         <nav className="bg-[#1C1C1E] border-t border-white/10 px-2 py-2.5 flex items-center justify-around text-slate-400 sticky bottom-0 z-40">
           <button
             onClick={() => setActiveTab('instructions')}
-            className={`flex flex-col items-center gap-1 ${
-              activeTab === 'instructions' ? 'text-blue-400 font-bold' : 'hover:text-white'
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'instructions' ? 'text-blue-400 font-bold bg-white/5' : 'hover:text-white'
             }`}
           >
             <Bell className="w-4 h-4" />
-            <span className="text-[10px]">작업지시</span>
+            <span className="text-[9px]">작업지시</span>
           </button>
 
           <button
             onClick={() => setActiveTab('tbm')}
-            className={`flex flex-col items-center gap-1 ${
-              activeTab === 'tbm' ? 'text-blue-400 font-bold' : 'hover:text-white'
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'tbm' ? 'text-blue-400 font-bold bg-white/5' : 'hover:text-white'
             }`}
           >
             <FileSignature className="w-4 h-4" />
-            <span className="text-[10px]">TBM서명</span>
+            <span className="text-[9px]">TBM서명</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('education')}
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'education' ? 'text-emerald-400 font-bold bg-white/5' : 'hover:text-white'
+            }`}
+          >
+            <FileCheck2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-[9px]">교안서명</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('ptw')}
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'ptw' ? 'text-amber-400 font-bold bg-white/5' : 'hover:text-white'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4" />
+            <span className="text-[9px]">PTW허가</span>
           </button>
 
           <button
             onClick={() => setActiveTab('equipment_use')}
-            className={`flex flex-col items-center gap-1 ${
-              activeTab === 'equipment_use' ? 'text-blue-400 font-bold' : 'hover:text-white'
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'equipment_use' ? 'text-blue-400 font-bold bg-white/5' : 'hover:text-white'
             }`}
           >
             <Truck className="w-4 h-4" />
-            <span className="text-[10px]">기기신청</span>
+            <span className="text-[9px]">기기신청</span>
           </button>
 
           <button
             onClick={() => setActiveTab('inspect')}
-            className={`flex flex-col items-center gap-1 ${
-              activeTab === 'inspect' ? 'text-blue-400 font-bold' : 'hover:text-white'
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'inspect' ? 'text-blue-400 font-bold bg-white/5' : 'hover:text-white'
             }`}
           >
             <ClipboardList className="w-4 h-4" />
-            <span className="text-[10px]">설비점검</span>
+            <span className="text-[9px]">설비점검</span>
           </button>
 
           <button
             onClick={() => setActiveTab('report')}
-            className={`flex flex-col items-center gap-1 ${
-              activeTab === 'report' ? 'text-blue-400 font-bold' : 'hover:text-white'
+            className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg ${
+              activeTab === 'report' ? 'text-blue-400 font-bold bg-white/5' : 'hover:text-white'
             }`}
           >
             <Camera className="w-4 h-4" />
-            <span className="text-[10px]">사진보고</span>
+            <span className="text-[9px]">사진보고</span>
           </button>
         </nav>
       )}

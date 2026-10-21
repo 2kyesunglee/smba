@@ -61,10 +61,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     setIsMounted(true);
+    store.fetchFromServer();
+
     const unsubscribe = store.subscribe(() => {
       setState({ ...store.getState() });
     });
-    return () => unsubscribe();
+
+    // 3초 주기 다중 디바이스 서버 동기화 폴링 (스마트폰 모바일 <-> PC 관리자 웹)
+    const interval = setInterval(() => {
+      store.fetchFromServer();
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [store]);
 
   const activeSOSAlerts = state.sosList.filter((s) => s.status === 'TRIGGERED');
