@@ -804,6 +804,56 @@ export const SafetyHealthView: React.FC = () => {
               💡 근로자가 스마트폰에서 수신된 지시를 확인하고 서약하면 대시보드에 실시간 완료 표시됩니다.
             </div>
           </div>
+
+          {/* Bottom Push History Table */}
+          <div className="glass-card p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-sm text-[#1D1D1F]">
+                📋 최근 작업지시서 발송 및 근로자 수신/서약 이력 ({pushHistories.length}건)
+              </span>
+              <span className="text-xs text-[#0071E3] font-semibold">실시간 동기화</span>
+            </div>
+            <div className="table-container shadow-sm">
+              <table className="custom-table text-xs">
+                <thead>
+                  <tr>
+                    <th>발송 일시</th>
+                    <th>수신 대상</th>
+                    <th>작업지시 내용 (한국어)</th>
+                    <th>수신/서약 상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pushHistories.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="text-center py-4 text-[#86868B]">
+                        발송된 작업지시가 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    pushHistories.map((push) => (
+                      <tr key={push.id} className="hover:bg-[#F9FAFB]">
+                        <td className="text-xs font-mono text-[#86868B]">{push.sentAt}</td>
+                        <td className="font-bold text-[#1D1D1F]">{push.target}</td>
+                        <td className="text-[#1D1D1F]">{push.instructionText}</td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              push.status === 'CONFIRMED'
+                                ? 'badge-green'
+                                : 'badge-amber'
+                            }`}
+                          >
+                            {push.status === 'CONFIRMED' ? '✅ 근로자 서약완료' : '전송완료 (확인대기)'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -833,8 +883,16 @@ export const SafetyHealthView: React.FC = () => {
                   <td className="text-xs text-[#FF3B30]">{ptw.hazardFactors}</td>
                   <td className="text-xs text-[#6E6E73]">{ptw.safetyMeasures}</td>
                   <td>
-                    <span className={`badge ${ptw.status === 'APPROVED' ? 'badge-green' : 'badge-amber'}`}>
-                      {ptw.status}
+                    <span
+                      className={`badge ${
+                        ptw.status === 'APPROVED'
+                          ? 'badge-green'
+                          : ptw.status === 'REJECTED'
+                          ? 'badge-red'
+                          : 'badge-amber'
+                      }`}
+                    >
+                      {ptw.status === 'APPROVED' ? '승인완료' : ptw.status === 'REJECTED' ? '반려됨' : '승인대기'}
                     </span>
                   </td>
                   <td className="text-right">
@@ -843,7 +901,7 @@ export const SafetyHealthView: React.FC = () => {
                         <button
                           onClick={() => {
                             approvePTW(ptw.id);
-                            alert(`[PTW 승인] ${ptw.taskName} 허가서가 승인되었습니다.`);
+                            alert(`[PTW 승인 완료] ${ptw.taskName} 허가서가 승인되었습니다. 근로자 스마트폰에 [승인완료]로 실시간 반영됩니다.`);
                           }}
                           className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
                         >
@@ -860,7 +918,9 @@ export const SafetyHealthView: React.FC = () => {
                         </button>
                       </div>
                     ) : (
-                      <span className="text-[11px] text-[#86868B]">{ptw.approvedBy}</span>
+                      <span className="text-[11px] text-[#86868B] font-mono">
+                        {ptw.approvedBy || '관리자 승인완료'}
+                      </span>
                     )}
                   </td>
                 </tr>

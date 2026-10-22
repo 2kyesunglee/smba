@@ -53,6 +53,8 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     addWorker,
     safetyMaterials,
     signSafetyMaterial,
+    pushHistories,
+    updatePushHistory,
   } = useAppStore();
 
   const translationService = new MultiLanguageTranslationService();
@@ -732,6 +734,51 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                       </p>
                     </div>
 
+                    {/* 실시간 관리자 작업지시서 카드 */}
+                    {pushHistories && pushHistories.length > 0 && (
+                      <div className="p-3 bg-blue-950/50 border border-blue-500/40 rounded-2xl space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-blue-300">
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                            📢 관리자 실시간 작업지시
+                          </span>
+                          <span className="badge badge-amber text-[9px]">실시간 푸시</span>
+                        </div>
+                        {pushHistories.slice(0, 2).map((push) => {
+                          const translated = translationService.translateInstruction(push.instructionText, selectedLang);
+                          const isConfirmed = push.status === 'CONFIRMED';
+                          return (
+                            <div key={push.id} className="p-2.5 bg-black/60 rounded-xl space-y-1.5 border border-white/10">
+                              <div className="text-xs font-bold text-white leading-snug">
+                                {translated}
+                              </div>
+                              <div className="text-[10px] text-gray-400">
+                                🇰🇷 원문: {push.instructionText}
+                              </div>
+                              <div className="pt-1 flex items-center justify-between text-[10px]">
+                                <span className="text-gray-400">{push.sentAt}</span>
+                                {isConfirmed ? (
+                                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" /> 서약 완료
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      updatePushHistory(push.id, { status: 'CONFIRMED' });
+                                      alert('작업지시를 확인하고 서약했습니다. (관리자 웹 대시보드에 실시간 전송)');
+                                    }}
+                                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg"
+                                  >
+                                    확인 및 서약
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Quick Action Grid */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <button
@@ -1019,20 +1066,56 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                     </form>
 
                     <div className="pt-2 border-t border-white/10">
-                      <span className="text-[11px] text-gray-400 font-bold block mb-1">
-                        신청 이력 및 승인 상태:
-                      </span>
-                      {ptwList.map((p) => (
-                        <div key={p.id} className="p-2.5 bg-[#1C1C1E] rounded-xl text-[11px] mb-1.5 flex justify-between items-center">
-                          <div>
-                            <div className="font-bold text-white">{p.taskName}</div>
-                            <div className="text-gray-400">{p.location}</div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] text-gray-400 font-bold block">
+                          신청 이력 및 승인 상태:
+                        </span>
+                        <span className="text-[10px] text-blue-400 font-semibold">실시간 동기화</span>
+                      </div>
+                      {ptwList.map((p) => {
+                        const isApproved = p.status === 'APPROVED';
+                        const isRejected = p.status === 'REJECTED';
+                        return (
+                          <div
+                            key={p.id}
+                            className={`p-2.5 rounded-xl text-[11px] mb-1.5 space-y-1 border ${
+                              isApproved
+                                ? 'bg-emerald-950/30 border-emerald-500/30'
+                                : isRejected
+                                ? 'bg-rose-950/30 border-rose-500/30'
+                                : 'bg-[#1C1C1E] border-white/5'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-bold text-white">{p.taskName}</div>
+                                <div className="text-gray-400 text-[10px]">{p.location} ({p.ptwNumber})</div>
+                              </div>
+                              <span
+                                className={`badge ${
+                                  isApproved
+                                    ? 'badge-green'
+                                    : isRejected
+                                    ? 'badge-red'
+                                    : 'badge-amber'
+                                }`}
+                              >
+                                {isApproved ? '✅ 승인완료' : isRejected ? '❌ 반려' : '⏳ 심사대기'}
+                              </span>
+                            </div>
+                            {isApproved && (
+                              <div className="text-[9.5px] text-emerald-300">
+                                승인자: {p.approvedBy || '관리자'} ({p.approvedAt ? new Date(p.approvedAt).toLocaleTimeString() : '승인완료'})
+                              </div>
+                            )}
+                            {isRejected && p.rejectionReason && (
+                              <div className="text-[9.5px] text-rose-300">
+                                반려 사유: {p.rejectionReason}
+                              </div>
+                            )}
                           </div>
-                          <span className={`badge ${p.status === 'APPROVED' ? 'badge-green' : 'badge-amber'}`}>
-                            {p.status}
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1121,25 +1204,61 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
 
                     {/* Usage Request Histories */}
                     <div className="pt-2 border-t border-white/10 space-y-1.5">
-                      <span className="text-[11px] text-gray-400 font-bold block">
-                        기기 승인 내역:
-                      </span>
-                      {equipmentUsageLogs.map((log) => (
-                        <div key={log.id} className="p-2.5 bg-[#1C1C1E] rounded-xl text-[11px] flex justify-between items-center border border-white/5">
-                          <div>
-                            <div className="font-bold text-white flex items-center gap-1.5">
-                              <span>[{log.equipmentType}]</span>
-                              <span className="text-gray-300 font-normal">{log.purpose}</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-gray-400 font-bold block">
+                          기기 승인 내역:
+                        </span>
+                        <span className="text-[10px] text-blue-400 font-semibold">실시간 동기화</span>
+                      </div>
+                      {equipmentUsageLogs.map((log) => {
+                        const isApproved = log.status === 'APPROVED';
+                        const isRejected = log.status === 'REJECTED';
+                        return (
+                          <div
+                            key={log.id}
+                            className={`p-2.5 rounded-xl text-[11px] space-y-1 border ${
+                              isApproved
+                                ? 'bg-emerald-950/30 border-emerald-500/30'
+                                : isRejected
+                                ? 'bg-rose-950/30 border-rose-500/30'
+                                : 'bg-[#1C1C1E] border-white/5'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                  <span>[{log.equipmentType}]</span>
+                                  <span className="text-gray-300 font-normal">{log.purpose}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-400">
+                                  {log.startTime} ~ {log.endTime}
+                                </div>
+                              </div>
+                              <span
+                                className={`badge ${
+                                  isApproved
+                                    ? 'badge-green'
+                                    : isRejected
+                                    ? 'badge-red'
+                                    : 'badge-amber'
+                                }`}
+                              >
+                                {isApproved ? '✅ 승인완료' : isRejected ? '❌ 반려' : '⏳ 승인대기'}
+                              </span>
                             </div>
-                            <div className="text-[10px] text-gray-400">
-                              {log.startTime} ~ {log.endTime}
-                            </div>
+                            {isApproved && (
+                              <div className="text-[9.5px] text-emerald-300">
+                                승인자: {log.approvedBy || '관리자'} ({log.approvedAt ? new Date(log.approvedAt).toLocaleTimeString() : '승인완료'})
+                              </div>
+                            )}
+                            {isRejected && log.rejectReason && (
+                              <div className="text-[9.5px] text-rose-300">
+                                반려 사유: {log.rejectReason}
+                              </div>
+                            )}
                           </div>
-                          <span className={`badge ${log.status === 'APPROVED' ? 'badge-green' : log.status === 'REJECTED' ? 'badge-red' : 'badge-amber'}`}>
-                            {log.status === 'APPROVED' ? '승인완료' : log.status === 'REJECTED' ? '반려' : '승인대기'}
-                          </span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

@@ -49,6 +49,8 @@ export default function MobileWorkerPage() {
     addWorker,
     safetyMaterials,
     signSafetyMaterial,
+    pushHistories,
+    updatePushHistory,
   } = useAppStore();
 
   const translationService = new MultiLanguageTranslationService();
@@ -101,15 +103,15 @@ export default function MobileWorkerPage() {
   const [isEduDrawing, setIsEduDrawing] = useState(false);
   const [hasEduSigned, setHasEduSigned] = useState(false);
 
-  // 작업 지시 목록
-  const [instructions, setInstructions] = useState([
+  // 작업 지시 확인 로컬 상태 및 기본 안내 지시
+  const [confirmedInstructionIds, setConfirmedInstructionIds] = useState<string[]>([]);
+  const initialDefaultInstructions = [
     {
       id: 'inst-1',
       sender: '김공장장 (안전관리자)',
       koreanText: '오늘 스크러버 배관 용접 작업 주의. 안전그네 및 소화기 2기 배치 필수.',
       time: '오늘 08:30',
       priority: 'HIGH',
-      isConfirmed: false,
     },
     {
       id: 'inst-2',
@@ -117,7 +119,6 @@ export default function MobileWorkerPage() {
       koreanText: '오후 2시 폐수처리장 슬러지 압착기 주변 고압세척 작업 시 미끄럼 및 감전 주의.',
       time: '오늘 09:10',
       priority: 'NORMAL',
-      isConfirmed: true,
     },
     {
       id: 'inst-3',
@@ -125,9 +126,35 @@ export default function MobileWorkerPage() {
       koreanText: 'B동 보일러실 청관제 투입 작업 시 방독마스크 및 내화학 장갑 착용 필수.',
       time: '어제 16:00',
       priority: 'HIGH',
-      isConfirmed: true,
     },
-  ]);
+  ];
+
+  // 관리자가 웹에서 발송한 pushHistories 중 현재 근로자 대상인 작업지시 필터링
+  const myPushHistories = (pushHistories || []).filter((h) => {
+    if (!h.targetWorkerId || h.targetWorkerId === 'ALL') return true;
+    const ids = h.targetWorkerId.split(',');
+    return ids.includes(currentWorker?.id || '') || ids.includes(activeWorkerId);
+  });
+
+  const displayInstructions = [
+    ...myPushHistories.map((h) => ({
+      id: h.id,
+      sender: '김공장장 (안전관리자)',
+      koreanText: h.instructionText,
+      time: h.sentAt,
+      priority: 'HIGH',
+      isConfirmed: h.status === 'CONFIRMED' || confirmedInstructionIds.includes(h.id),
+      target: h.target,
+      isRealPush: true,
+    })),
+    ...initialDefaultInstructions
+      .filter((inst) => !myPushHistories.some((h) => h.id === inst.id))
+      .map((inst) => ({
+        ...inst,
+        isConfirmed: confirmedInstructionIds.includes(inst.id),
+        isRealPush: false,
+      })),
+  ];
 
   // Touch signature canvas state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -306,10 +333,11 @@ export default function MobileWorkerPage() {
   };
 
   const handleConfirmInstruction = (id: string) => {
-    setInstructions(
-      instructions.map((inst) => (inst.id === id ? { ...inst, isConfirmed: true } : inst))
-    );
-    alert('작업지시를 확인하고 서약했습니다. (관리자 웹 대시보드에 확인 기록이 전송됩니다.)');
+    setConfirmedInstructionIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    if (pushHistories?.some((h) => h.id === id)) {
+      updatePushHistory(id, { status: 'CONFIRMED' });
+    }
+    alert('작업지시를 확인하고 서약했습니다. (관리자 웹 대시보드에 확인 기록이 실시간 전송되었습니다.)');
   };
 
   const handleSOS = () => {
@@ -380,8 +408,7 @@ export default function MobileWorkerPage() {
   const handleCreatePTWSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createPTW(ptwForm);
-    alert('작업허가서(PTW)가 신청되었습니다. 관리자 웹 승인 후 착수할 수 있습니다.');
-    setActiveTab('instructions');
+    alert('🎉 작업허가서(PTW)가 신청되었습니다.\n\n관리자 웹의 "PTW 작업허가 심사" 대기열에 실시간 등록되었습니다.\n관리자 승인 즉시 아래 목록에서 [승인완료]로 확인하실 수 있습니다.');
   };
 
   const handleEquipmentUseSubmit = (e: React.FormEvent) => {
@@ -709,11 +736,11 @@ export default function MobileWorkerPage() {
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-slate-400 font-semibold px-1">
-                  <span>수신된 작업 지시 ({instructions.length}건)</span>
+                  <span>수신된 작업 지시 ({displayInstructions.length}건)</span>
                   <span>최신순</span>
                 </div>
 
-                {instructions.map((inst) => {
+                {displayInstructions.map((inst) => {
                   const translated = translationService.translateInstruction(inst.koreanText, selectedLang);
 
                   return (
@@ -727,8 +754,11 @@ export default function MobileWorkerPage() {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                          <span className={`w-2 h-2 rounded-full ${inst.isRealPush ? 'bg-amber-400 animate-pulse' : 'bg-blue-400'}`}></span>
                           <span className="text-xs font-bold text-white">{inst.sender}</span>
+                          {inst.isRealPush && (
+                            <span className="badge badge-amber text-[9px]">실시간 수신</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                           <Clock className="w-3 h-3" />
@@ -763,7 +793,7 @@ export default function MobileWorkerPage() {
                         ) : (
                           <button
                             onClick={() => handleConfirmInstruction(inst.id)}
-                            className="btn-primary w-full justify-center text-xs py-2.5 bg-[#0071E3] hover:bg-[#0077ED] rounded-xl"
+                            className="btn-primary w-full justify-center text-xs py-2.5 bg-[#0071E3] hover:bg-[#0077ED] rounded-xl font-bold"
                           >
                             <CheckCircle2 className="w-4 h-4" />
                             작업지시 확인 및 서약 (Confirm)
@@ -1035,6 +1065,69 @@ export default function MobileWorkerPage() {
                     작업허가서 관리자 승인 신청
                   </button>
                 </form>
+
+                {/* PTW 실시간 승인 상태 목록 (근로자 스마트폰 표출) */}
+                <div className="pt-3 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-300 font-bold">
+                      내 작업허가서(PTW) 신청 및 실시간 심사 상태:
+                    </span>
+                    <span className="text-[10px] text-blue-400 font-semibold">실시간 웹 동기화</span>
+                  </div>
+                  {ptwList.length === 0 ? (
+                    <div className="p-3 bg-black/40 rounded-xl text-center text-slate-400 text-xs">
+                      신청된 작업허가서가 없습니다.
+                    </div>
+                  ) : (
+                    ptwList.map((p) => {
+                      const isApproved = p.status === 'APPROVED';
+                      const isRejected = p.status === 'REJECTED';
+                      return (
+                        <div
+                          key={p.id}
+                          className={`p-3 rounded-xl border transition-all text-xs space-y-1.5 ${
+                            isApproved
+                              ? 'bg-emerald-950/30 border-emerald-500/30'
+                              : isRejected
+                              ? 'bg-rose-950/30 border-rose-500/30'
+                              : 'bg-black/50 border-white/10'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-[10px] text-blue-300 font-bold">{p.ptwNumber}</span>
+                            <span
+                              className={`badge ${
+                                isApproved
+                                  ? 'badge-green'
+                                  : isRejected
+                                  ? 'badge-red'
+                                  : 'badge-amber'
+                              }`}
+                            >
+                              {isApproved ? '✅ 승인완료 (작업착수 가능)' : isRejected ? '❌ 반려됨' : '⏳ 관리자 심사 대기'}
+                            </span>
+                          </div>
+                          <div className="font-bold text-white text-sm">{p.taskName}</div>
+                          <div className="text-[11px] text-slate-300 flex items-center justify-between">
+                            <span>위치: {p.location}</span>
+                            <span className="text-slate-400 text-[10px]">{p.workDate}</span>
+                          </div>
+                          {isApproved && (
+                            <div className="p-2 bg-emerald-500/10 rounded-lg text-[10.5px] text-emerald-300 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>승인자: {p.approvedBy || '관리자'} ({p.approvedAt ? new Date(p.approvedAt).toLocaleTimeString() : '승인완료'})</span>
+                            </div>
+                          )}
+                          {isRejected && p.rejectionReason && (
+                            <div className="p-2 bg-rose-500/10 rounded-lg text-[10.5px] text-rose-300">
+                              반려 사유: {p.rejectionReason}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
 
@@ -1122,25 +1215,61 @@ export default function MobileWorkerPage() {
 
                 {/* Histories */}
                 <div className="pt-2 border-t border-white/10 space-y-2">
-                  <span className="text-[11px] text-slate-400 font-bold block">
-                    내 기기 사용 승인 상태:
-                  </span>
-                  {equipmentUsageLogs.map((log) => (
-                    <div key={log.id} className="p-3 bg-black/50 rounded-xl text-xs flex justify-between items-center border border-white/5">
-                      <div>
-                        <div className="font-bold text-white flex items-center gap-1.5">
-                          <span className="text-blue-400">[{log.equipmentType}]</span>
-                          <span>{log.purpose}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 font-bold block">
+                      내 기기 사용 승인 상태:
+                    </span>
+                    <span className="text-[10px] text-blue-400 font-semibold">실시간 동기화</span>
+                  </div>
+                  {equipmentUsageLogs.map((log) => {
+                    const isApproved = log.status === 'APPROVED';
+                    const isRejected = log.status === 'REJECTED';
+                    return (
+                      <div
+                        key={log.id}
+                        className={`p-3 rounded-xl text-xs space-y-1.5 border ${
+                          isApproved
+                            ? 'bg-emerald-950/20 border-emerald-500/30'
+                            : isRejected
+                            ? 'bg-rose-950/20 border-rose-500/30'
+                            : 'bg-black/50 border-white/5'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            <span className="text-blue-400">[{log.equipmentType}]</span>
+                            <span>{log.purpose}</span>
+                          </div>
+                          <span
+                            className={`badge ${
+                              isApproved
+                                ? 'badge-green'
+                                : isRejected
+                                ? 'badge-red'
+                                : 'badge-amber'
+                            }`}
+                          >
+                            {isApproved ? '✅ 승인완료' : isRejected ? '❌ 반려' : '⏳ 승인대기'}
+                          </span>
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          {log.startTime} ~ {log.endTime}
+                        <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                          <span>사용시간: {log.startTime} ~ {log.endTime}</span>
+                          {log.location && <span>구역: {log.location}</span>}
                         </div>
+                        {isApproved && (
+                          <div className="p-1.5 bg-emerald-500/10 rounded text-[10px] text-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>승인자: {log.approvedBy || '관리자'} ({log.approvedAt ? new Date(log.approvedAt).toLocaleTimeString() : '승인완료'})</span>
+                          </div>
+                        )}
+                        {isRejected && log.rejectReason && (
+                          <div className="p-1.5 bg-rose-500/10 rounded text-[10px] text-rose-300">
+                            반려 사유: {log.rejectReason}
+                          </div>
+                        )}
                       </div>
-                      <span className={`badge ${log.status === 'APPROVED' ? 'badge-green' : log.status === 'REJECTED' ? 'badge-red' : 'badge-amber'}`}>
-                        {log.status === 'APPROVED' ? '승인완료' : log.status === 'REJECTED' ? '반려' : '승인대기'}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

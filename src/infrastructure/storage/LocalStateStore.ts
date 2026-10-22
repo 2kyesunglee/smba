@@ -68,7 +68,7 @@ export interface PushHistoryItem {
   target: string;
   targetWorkerId?: string;
   instructionText: string;
-  status: 'SENT' | 'DELIVERED';
+  status: 'SENT' | 'DELIVERED' | 'CONFIRMED';
 }
 
 export interface StoreState {
@@ -789,10 +789,19 @@ export class LocalStateStore {
     }
   }
 
-  public saveToStorage(): void {
+  public persistToLocalStorage(): void {
     if (!this.isStorageAvailable()) return;
     try {
       window.localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(this.state));
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  public saveToStorage(): void {
+    if (!this.isStorageAvailable()) return;
+    try {
+      this.persistToLocalStorage();
       // Optional async server-side sync for different devices (smartphone <-> PC)
       if (typeof fetch !== 'undefined') {
         fetch('/api/sync', {
@@ -823,13 +832,36 @@ export class LocalStateStore {
         if (parsed.equipmentUsageLogs && Array.isArray(parsed.equipmentUsageLogs)) {
           this.state.equipmentUsageLogs = parsed.equipmentUsageLogs.map((l: any) => EquipmentUsageLog.create(l));
         }
+        if (parsed.pushHistories && Array.isArray(parsed.pushHistories)) {
+          this.state.pushHistories = parsed.pushHistories;
+        }
+        if (parsed.inspections && Array.isArray(parsed.inspections)) {
+          this.state.inspections = parsed.inspections.map((i: any) => Inspection.create(i));
+        }
+        if (parsed.sosList && Array.isArray(parsed.sosList)) {
+          this.state.sosList = parsed.sosList.map((s: any) => SOSAlert.create(s));
+        }
         if (parsed.workReports && Array.isArray(parsed.workReports)) {
           this.state.workReports = parsed.workReports.map((r: any) => new WorkReport(r));
         }
         if (parsed.safetyMaterials && Array.isArray(parsed.safetyMaterials)) {
           this.state.safetyMaterials = parsed.safetyMaterials;
         }
-        this.saveToStorage();
+        if (parsed.equipmentTypes && Array.isArray(parsed.equipmentTypes)) {
+          this.state.equipmentTypes = parsed.equipmentTypes;
+        }
+        if (parsed.inspectionTargets && Array.isArray(parsed.inspectionTargets)) {
+          this.state.inspectionTargets = parsed.inspectionTargets;
+        }
+        if (parsed.documents && Array.isArray(parsed.documents)) {
+          this.state.documents = parsed.documents;
+        }
+        if (parsed.notifications && Array.isArray(parsed.notifications)) {
+          this.state.notifications = parsed.notifications;
+        }
+
+        // 로컬스토리지에만 저장하고, 서버로 다시 POST하지 않음 (무한 덮어쓰기 방지)
+        this.persistToLocalStorage();
         this.notifyListenersOnly();
       }
     } catch {
@@ -897,6 +929,7 @@ export class LocalStateStore {
     this.state.ptwList = this.state.ptwList.map((p) => {
       if (p.id === ptwId) {
         p.approve(adminId);
+        return PTWRequest.create(p.toJSON() as any);
       }
       return p;
     });
@@ -907,6 +940,7 @@ export class LocalStateStore {
     this.state.ptwList = this.state.ptwList.map((p) => {
       if (p.id === ptwId) {
         p.reject(adminId, reason);
+        return PTWRequest.create(p.toJSON() as any);
       }
       return p;
     });
@@ -1074,6 +1108,7 @@ export class LocalStateStore {
     this.state.equipmentUsageLogs = this.state.equipmentUsageLogs.map((item) => {
       if (item.id === id) {
         item.approve(adminName);
+        return EquipmentUsageLog.create(item.toJSON() as any);
       }
       return item;
     });
@@ -1084,6 +1119,7 @@ export class LocalStateStore {
     this.state.equipmentUsageLogs = this.state.equipmentUsageLogs.map((item) => {
       if (item.id === id) {
         item.reject(reason, adminName);
+        return EquipmentUsageLog.create(item.toJSON() as any);
       }
       return item;
     });
