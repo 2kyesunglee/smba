@@ -34,6 +34,8 @@ import {
   Activity,
   Trash2,
   Camera,
+  Languages,
+  Globe,
 } from 'lucide-react';
 
 export const EquipmentProcessView: React.FC = () => {
@@ -485,6 +487,24 @@ export const EquipmentProcessView: React.FC = () => {
             </div>
           </div>
 
+          {/* 16 Languages Auto Translation Banner */}
+          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/70 rounded-2xl text-xs text-blue-900 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-blue-600 text-white rounded-lg shadow-sm">
+                <Languages className="w-4 h-4" />
+              </span>
+              <div>
+                <strong className="font-bold text-[#1D1D1F]">16개국어 자동 양방향 번역 시스템 활성화</strong>
+                <p className="text-[11px] text-[#6E6E73] mt-0.5">
+                  외국인 근로자가 스마트폰에서 모국어로 등록한 작업 보고서(작업명, 위치, 문제점 및 개선 내용)가 관리자에게 한국어로 자동 번역되어 표시됩니다.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex badge badge-blue text-[10px] font-bold">
+              18개 언어 상시 번역 중
+            </span>
+          </div>
+
           {/* VIEW A: Gallery Grid View */}
           {galleryViewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -494,7 +514,19 @@ export const EquipmentProcessView: React.FC = () => {
                 </div>
               ) : (
                 filteredWorkReports.map((report) => {
-                  const translatedDesc = translationService.translateToKorean(report.description);
+                  const worker = workers.find((w) => w.id === report.workerId || w.name === report.workerName);
+                  const nationality = worker?.nationality;
+
+                  const taskTrans = translationService.translateWorkerTextToKorean(report.taskName, nationality);
+                  const locationTrans = translationService.translateWorkerTextToKorean(report.location, nationality);
+                  const beforeTrans = report.beforeDescription
+                    ? translationService.translateWorkerTextToKorean(report.beforeDescription, nationality)
+                    : null;
+                  const afterTrans = report.afterDescription
+                    ? translationService.translateWorkerTextToKorean(report.afterDescription, nationality)
+                    : null;
+                  const descTrans = translationService.translateWorkerTextToKorean(report.description, nationality);
+
                   const beforeList = report.beforeImgs && report.beforeImgs.length > 0 ? report.beforeImgs : [report.beforeImg].filter(Boolean);
                   const afterList = report.afterImgs && report.afterImgs.length > 0 ? report.afterImgs : [report.afterImg].filter(Boolean);
 
@@ -503,11 +535,26 @@ export const EquipmentProcessView: React.FC = () => {
                       {/* Card Header */}
                       <div className="flex items-center justify-between pb-2 border-b border-black/5">
                         <div>
-                          <h3 className="font-bold text-base text-[#1D1D1F]">{report.taskName}</h3>
-                          <div className="flex items-center gap-2 text-xs text-[#6E6E73] mt-0.5">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-base text-[#1D1D1F]">{taskTrans.koreanText}</h3>
+                            {taskTrans.isTranslated && (
+                              <span className="badge badge-blue text-[10px] font-bold">
+                                {taskTrans.originalFlag} 한국어 번역됨
+                              </span>
+                            )}
+                          </div>
+                          {taskTrans.isTranslated && (
+                            <p className="text-[10px] text-[#86868B] mt-0.5">
+                              원문({taskTrans.originalFlag}): {taskTrans.originalText}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 text-xs text-[#6E6E73] mt-1">
                             <span className="font-medium text-[#1D1D1F]">{report.workerName}</span>
                             <span>·</span>
-                            <span>{report.location}</span>
+                            <span>{locationTrans.koreanText}</span>
+                            {locationTrans.isTranslated && (
+                              <span className="text-[10px] text-[#86868B]">({locationTrans.originalText})</span>
+                            )}
                           </div>
                         </div>
                         <span className="font-mono text-xs text-[#86868B]">{report.reportedAt}</span>
@@ -546,9 +593,14 @@ export const EquipmentProcessView: React.FC = () => {
                             ))}
                           </div>
 
-                          {report.beforeDescription && (
-                            <div className="p-2 bg-red-100/70 border border-red-200 rounded-xl text-[11px] text-red-950 leading-snug">
-                              <strong>문제점:</strong> {report.beforeDescription}
+                          {beforeTrans && (
+                            <div className="p-2 bg-red-100/70 border border-red-200 rounded-xl text-[11px] text-red-950 leading-snug space-y-0.5">
+                              <div><strong>문제점:</strong> {beforeTrans.koreanText}</div>
+                              {beforeTrans.isTranslated && (
+                                <div className="text-[10px] text-red-700/80 font-mono">
+                                  원문({beforeTrans.originalFlag}): {beforeTrans.originalText}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -584,21 +636,35 @@ export const EquipmentProcessView: React.FC = () => {
                             ))}
                           </div>
 
-                          {report.afterDescription && (
-                            <div className="p-2 bg-emerald-100/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-950 leading-snug">
-                              <strong>개선완료:</strong> {report.afterDescription}
+                          {afterTrans && (
+                            <div className="p-2 bg-emerald-100/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-950 leading-snug space-y-0.5">
+                              <div><strong>개선완료:</strong> {afterTrans.koreanText}</div>
+                              {afterTrans.isTranslated && (
+                                <div className="text-[10px] text-emerald-800/80 font-mono">
+                                  원문({afterTrans.originalFlag}): {afterTrans.originalText}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       </div>
 
                       {/* Korean Reverse Translation for foreign worker notes (Request #3) */}
-                      <div className="p-3 bg-[#F5F5F7] rounded-xl text-xs space-y-1">
-                        <div className="text-[10px] text-[#86868B] font-semibold">근로자 원문 조치 설명:</div>
-                        <p className="text-[#1D1D1F]">{report.description}</p>
-                        {translatedDesc !== report.description && (
-                          <div className="pt-1 border-t border-black/5 text-emerald-800 font-medium text-[11px]">
-                            {translatedDesc}
+                      <div className="p-3 bg-[#F5F5F7] rounded-xl text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#86868B] font-semibold">
+                            조치 설명 (한국어 자동 번역):
+                          </span>
+                          {descTrans.isTranslated && (
+                            <span className="badge badge-blue text-[9px] font-bold">
+                              {descTrans.originalFlag} 자동 번역
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[#1D1D1F] font-medium">{descTrans.koreanText}</p>
+                        {descTrans.isTranslated && (
+                          <div className="pt-1 border-t border-black/5 text-[#86868B] text-[10px]">
+                            근로자 모국어 원문: {descTrans.originalText}
                           </div>
                         )}
                       </div>
@@ -614,7 +680,7 @@ export const EquipmentProcessView: React.FC = () => {
                 <thead>
                   <tr>
                     <th>보고 일시</th>
-                    <th>작업 명칭</th>
+                    <th>작업 명칭 (한국어 번역)</th>
                     <th>작업 위치</th>
                     <th>작업자</th>
                     <th>Before 문제점 설명</th>
@@ -630,36 +696,77 @@ export const EquipmentProcessView: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredWorkReports.map((report) => (
-                      <tr key={report.id} className="hover:bg-[#F9FAFB]">
-                        <td className="font-mono text-xs text-[#86868B]">{report.reportedAt}</td>
-                        <td className="font-bold text-[#1D1D1F]">{report.taskName}</td>
-                        <td className="text-xs text-[#6E6E73]">{report.location}</td>
-                        <td className="font-semibold text-[#1D1D1F]">{report.workerName}</td>
-                        <td className="text-xs text-red-900 max-w-xs truncate">{report.beforeDescription || '-'}</td>
-                        <td className="text-xs text-emerald-900 max-w-xs truncate">{report.afterDescription || report.description}</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleDownloadImage(report.beforeImg, `Before_${report.taskName}.jpg`)}
-                              className="btn-secondary text-[11px] py-1 px-2 text-[#0071E3] flex items-center gap-1"
-                              title="Before 사진 다운로드"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>전(Before)</span>
-                            </button>
-                            <button
-                              onClick={() => handleDownloadImage(report.afterImg, `After_${report.taskName}.jpg`)}
-                              className="btn-secondary text-[11px] py-1 px-2 text-[#34C759] flex items-center gap-1"
-                              title="After 사진 다운로드"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>후(After)</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                    filteredWorkReports.map((report) => {
+                      const worker = workers.find((w) => w.id === report.workerId || w.name === report.workerName);
+                      const nationality = worker?.nationality;
+                      const taskTrans = translationService.translateWorkerTextToKorean(report.taskName, nationality);
+                      const locTrans = translationService.translateWorkerTextToKorean(report.location, nationality);
+                      const beforeTrans = report.beforeDescription
+                        ? translationService.translateWorkerTextToKorean(report.beforeDescription, nationality)
+                        : null;
+                      const afterTrans = report.afterDescription
+                        ? translationService.translateWorkerTextToKorean(report.afterDescription, nationality)
+                        : translationService.translateWorkerTextToKorean(report.description, nationality);
+
+                      return (
+                        <tr key={report.id} className="hover:bg-[#F9FAFB]">
+                          <td className="font-mono text-xs text-[#86868B]">{report.reportedAt}</td>
+                          <td>
+                            <div className="font-bold text-[#1D1D1F] flex items-center gap-1.5">
+                              <span>{taskTrans.koreanText}</span>
+                              {taskTrans.isTranslated && (
+                                <span className="text-[10px] text-blue-600 font-normal">
+                                  [{taskTrans.originalFlag}]
+                                </span>
+                              )}
+                            </div>
+                            {taskTrans.isTranslated && (
+                              <div className="text-[10px] text-[#86868B] truncate max-w-xs">
+                                원문: {taskTrans.originalText}
+                              </div>
+                            )}
+                          </td>
+                          <td className="text-xs text-[#6E6E73]">{locTrans.koreanText}</td>
+                          <td className="font-semibold text-[#1D1D1F]">{report.workerName}</td>
+                          <td className="text-xs text-red-900 max-w-xs">
+                            <div className="truncate">{beforeTrans?.koreanText || '-'}</div>
+                            {beforeTrans?.isTranslated && (
+                              <div className="text-[9px] text-red-700/70 truncate">
+                                원문: {beforeTrans.originalText}
+                              </div>
+                            )}
+                          </td>
+                          <td className="text-xs text-emerald-900 max-w-xs">
+                            <div className="truncate">{afterTrans.koreanText}</div>
+                            {afterTrans.isTranslated && (
+                              <div className="text-[9px] text-emerald-700/70 truncate">
+                                원문: {afterTrans.originalText}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleDownloadImage(report.beforeImg, `Before_${report.taskName}.jpg`)}
+                                className="btn-secondary text-[11px] py-1 px-2 text-[#0071E3] flex items-center gap-1"
+                                title="Before 사진 다운로드"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>전(Before)</span>
+                              </button>
+                              <button
+                                onClick={() => handleDownloadImage(report.afterImg, `After_${report.taskName}.jpg`)}
+                                className="btn-secondary text-[11px] py-1 px-2 text-[#34C759] flex items-center gap-1"
+                                title="After 사진 다운로드"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>후(After)</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -670,47 +777,113 @@ export const EquipmentProcessView: React.FC = () => {
 
       {/* SECTION 2: Inspections Logs & Abnormalities */}
       {activeSection === 'logs' && (
-        <div className="table-container shadow-sm">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th>점검 일시</th>
-                <th>설비명</th>
-                <th>점검자</th>
-                <th>측정치 데이터</th>
-                <th>상태</th>
-                <th>이상 징후 및 조치 사항</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inspections.map((i) => (
-                <tr key={i.id} className="hover:bg-[#F9FAFB]">
-                  <td className="font-mono text-xs">{new Date(i.inspectedAt).toLocaleString()}</td>
-                  <td className="font-bold text-[#1D1D1F]">{i.equipmentName}</td>
-                  <td className="font-medium text-[#1D1D1F]">{i.workerName}</td>
-                  <td className="font-mono text-xs text-[#0071E3]">{JSON.stringify(i.data)}</td>
-                  <td>
-                    <span className={`badge ${i.isAbnormal ? 'badge-red' : 'badge-green'}`}>
-                      {i.isAbnormal ? '이상 발생' : '정상'}
-                    </span>
-                  </td>
-                  <td className="text-xs">
-                    {i.isAbnormal ? (
-                      <span className="text-[#FF3B30] font-bold">{i.abnormalNotes}</span>
-                    ) : (
-                      <span className="text-[#86868B]">이상 없음</span>
-                    )}
-                  </td>
+        <div className="space-y-4">
+          {/* 16 Languages Auto Translation Banner */}
+          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200/70 rounded-2xl text-xs text-red-950 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-red-600 text-white rounded-lg shadow-sm">
+                <Languages className="w-4 h-4" />
+              </span>
+              <div>
+                <strong className="font-bold text-[#1D1D1F]">16개국어 이상 징후 일지 실시간 한국어 번역</strong>
+                <p className="text-[11px] text-[#6E6E73] mt-0.5">
+                  외국인 근로자가 현장에서 모국어로 입력한 설비 이상 징후 및 조치 메모가 관리자에게 한국어로 자동 번역되어 표시됩니다.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex badge badge-red text-[10px] font-bold">
+              18개 언어 지원
+            </span>
+          </div>
+
+          <div className="table-container shadow-sm">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>점검 일시</th>
+                  <th>설비명</th>
+                  <th>점검자</th>
+                  <th>측정치 데이터</th>
+                  <th>상태</th>
+                  <th>이상 징후 및 조치 사항 (한국어 번역)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {inspections.map((i) => {
+                  const worker = workers.find((w) => w.id === i.workerId || w.name === i.workerName);
+                  const notesTrans = i.abnormalNotes
+                    ? translationService.translateWorkerTextToKorean(i.abnormalNotes, worker?.nationality)
+                    : null;
+
+                  return (
+                    <tr key={i.id} className="hover:bg-[#F9FAFB]">
+                      <td className="font-mono text-xs">{new Date(i.inspectedAt).toLocaleString()}</td>
+                      <td className="font-bold text-[#1D1D1F]">{i.equipmentName}</td>
+                      <td className="font-medium text-[#1D1D1F]">
+                        <div className="flex items-center gap-1.5">
+                          <span>{i.workerName}</span>
+                          {worker?.nationality && (
+                            <span className="text-[10px] text-[#86868B]">({worker.nationality})</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="font-mono text-xs text-[#0071E3]">{JSON.stringify(i.data)}</td>
+                      <td>
+                        <span className={`badge ${i.isAbnormal ? 'badge-red' : 'badge-green'}`}>
+                          {i.isAbnormal ? '이상 발생' : '정상'}
+                        </span>
+                      </td>
+                      <td className="text-xs">
+                        {i.isAbnormal && notesTrans ? (
+                          <div className="space-y-1">
+                            <div className="text-[#FF3B30] font-bold flex items-center gap-1.5">
+                              <span>{notesTrans.koreanText}</span>
+                              {notesTrans.isTranslated && (
+                                <span className="badge badge-blue text-[9px] font-bold">
+                                  {notesTrans.originalFlag} 한국어 번역
+                                </span>
+                              )}
+                            </div>
+                            {notesTrans.isTranslated && (
+                              <div className="text-[10px] text-[#86868B] truncate max-w-sm">
+                                원문: {notesTrans.originalText}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[#86868B]">이상 없음</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* SECTION 3: Inspection Targets Management (Request #6: 설비점검 대상 추가 및 관리) */}
       {activeSection === 'targets' && (
         <div className="space-y-4">
+          {/* 16 Languages Translation Integration Banner */}
+          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200/70 rounded-2xl text-xs text-blue-950 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-[#0071E3] text-white rounded-lg shadow-sm">
+                <Globe className="w-4 h-4" />
+              </span>
+              <div>
+                <strong className="font-bold text-[#1D1D1F]">스마트폰 16개국어 실시간 자동 번역 배포 연동</strong>
+                <p className="text-[11px] text-[#6E6E73] mt-0.5">
+                  관리자가 한국어로 등록한 설비명, 설명, 측정 기준치 항목은 외국인 근로자 스마트폰에 국적별 언어로 자동 번역되어 표시됩니다.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex badge badge-blue text-[10px] font-bold">
+              모바일 실시간 연동
+            </span>
+          </div>
+
           <div className="glass-card p-5 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/5">
               <div>
@@ -738,17 +911,23 @@ export const EquipmentProcessView: React.FC = () => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="badge badge-blue text-[10px] font-bold">{target.cycle} 점검</span>
-                      <button
-                        onClick={() => {
-                          if (confirm(`"${target.name}" 설비점검 대상을 삭제하시겠습니까?`)) {
-                            deleteInspectionTarget(target.id);
-                          }
-                        }}
-                        className="text-[#FF3B30] hover:text-red-700 p-1"
-                        title="삭제"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <span className="badge badge-green text-[9px] font-medium flex items-center gap-0.5">
+                          <Languages className="w-2.5 h-2.5" />
+                          <span>16개국어 연동</span>
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (confirm(`"${target.name}" 설비점검 대상을 삭제하시겠습니까?`)) {
+                              deleteInspectionTarget(target.id);
+                            }
+                          }}
+                          className="text-[#FF3B30] hover:text-red-700 p-1"
+                          title="삭제"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <h4 className="font-bold text-sm text-[#1D1D1F]">{target.name}</h4>
@@ -780,12 +959,36 @@ export const EquipmentProcessView: React.FC = () => {
       {/* SECTION 4: Real QR Code Management (Request #8) */}
       {activeSection === 'qr' && (
         <div className="space-y-4">
+          {/* 16 Languages QR Scanning Banner */}
+          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200/70 rounded-2xl text-xs text-amber-950 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-amber-600 text-white rounded-lg shadow-sm">
+                <QrCode className="w-4 h-4" />
+              </span>
+              <div>
+                <strong className="font-bold text-[#1D1D1F]">QR 스캔 시 16개국어 LOTO / MSDS 모국어 자동 번역</strong>
+                <p className="text-[11px] text-[#6E6E73] mt-0.5">
+                  외국인 근로자가 현장에서 QR을 스캔하면 관리자가 입력한 주의사항 및 비상조치절차가 근로자의 국적 언어로 즉시 자동 번역되어 표시됩니다.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex badge badge-amber text-[10px] font-bold">
+              스캔 즉시 번역
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {equipmentList.map((eq) => (
               <div key={eq.id} className="glass-card p-5 space-y-3 flex flex-col justify-between">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="badge badge-amber text-[10px] font-bold">{eq.type}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="badge badge-amber text-[10px] font-bold">{eq.type}</span>
+                      <span className="badge badge-blue text-[9px] font-medium flex items-center gap-0.5">
+                        <Languages className="w-2.5 h-2.5" />
+                        <span>16개국어 번역</span>
+                      </span>
+                    </div>
                     <span className="font-mono text-xs text-[#86868B]">{eq.code}</span>
                   </div>
 
@@ -796,7 +999,10 @@ export const EquipmentProcessView: React.FC = () => {
                   </p>
 
                   <div className="p-2.5 bg-[#F5F5F7] rounded-xl text-[11px] text-[#1D1D1F] space-y-1">
-                    <div><strong>주의:</strong> {eq.cautionNotes}</div>
+                    <div><strong>주의사항:</strong> {eq.cautionNotes}</div>
+                    {eq.emergencyProcedures && (
+                      <div><strong>비상조치:</strong> {eq.emergencyProcedures}</div>
+                    )}
                   </div>
                 </div>
 
@@ -817,57 +1023,83 @@ export const EquipmentProcessView: React.FC = () => {
 
       {/* SECTION 5: Dynamic Checklist Builder */}
       {activeSection === 'builder' && (
-        <div className="glass-card p-6 space-y-5">
-          <div className="pb-3 border-b border-black/5">
-            <h3 className="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-purple-600" />
-              스마트 체크리스트 동적 폼 빌더
-            </h3>
-            <p className="text-xs text-[#86868B] mt-0.5">
-              공장 내 특수 설비에 맞는 점검 항목과 한계 기준치를 자유롭게 생성 및 배포합니다.
-            </p>
+        <div className="space-y-4">
+          {/* 16 Languages Dynamic Form Banner */}
+          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200/70 rounded-2xl text-xs text-purple-950 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-purple-600 text-white rounded-lg shadow-sm">
+                <Sliders className="w-4 h-4" />
+              </span>
+              <div>
+                <strong className="font-bold text-[#1D1D1F]">스마트 체크리스트 16개국어 실시간 자동 번역 배포</strong>
+                <p className="text-[11px] text-[#6E6E73] mt-0.5">
+                  관리자가 한국어로 생성한 체크리스트 점검 항목과 한계치 서식은 외국인 근로자 스마트폰에 모국어로 자동 번역되어 전달됩니다.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex badge badge-purple text-[10px] font-bold">
+              16개국어 배포
+            </span>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-bold text-[#1D1D1F] block mb-1">체크리스트 서식 제목</label>
-              <input
-                type="text"
-                value={formTitle}
-                onChange={(e) => setFormTitle(e.target.value)}
-                className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F]"
-              />
+          <div className="glass-card p-6 space-y-5">
+            <div className="pb-3 border-b border-black/5">
+              <h3 className="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-purple-600" />
+                스마트 체크리스트 동적 폼 빌더
+              </h3>
+              <p className="text-xs text-[#86868B] mt-0.5">
+                공장 내 특수 설비에 맞는 점검 항목과 한계 기준치를 자유롭게 생성 및 배포합니다.
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#1D1D1F] block">점검 항목 목록:</label>
-              {formFields.map((field, idx) => (
-                <div key={field.id} className="p-3 bg-[#F5F5F7] rounded-xl flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-purple-600 font-bold">{idx + 1}.</span>
-                    <span className="font-semibold text-[#1D1D1F]">{field.label}</span>
-                    <span className="text-[#86868B]">({field.type === 'number' ? `수치입력, 기준한계: ${field.maxThreshold}${field.unit}` : '체크박스'})</span>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#1D1D1F] block mb-1">체크리스트 서식 제목</label>
+                <input
+                  type="text"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-3 text-xs text-[#1D1D1F]"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#1D1D1F] block">점검 항목 목록:</label>
+                {formFields.map((field, idx) => (
+                  <div key={field.id} className="p-3 bg-[#F5F5F7] rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-purple-600 font-bold">{idx + 1}.</span>
+                      <span className="font-semibold text-[#1D1D1F]">{field.label}</span>
+                      <span className="text-[#86868B]">({field.type === 'number' ? `수치입력, 기준한계: ${field.maxThreshold}${field.unit}` : '체크박스'})</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-blue-600 font-medium flex items-center gap-0.5">
+                        <Languages className="w-3 h-3" />
+                        16개국어 번역 지원
+                      </span>
+                      <span className="badge badge-green text-[10px]">필수항목</span>
+                    </div>
                   </div>
-                  <span className="badge badge-green text-[10px]">필수항목</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            <div className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleAddField}
-                className="btn-secondary text-xs py-2 px-3.5"
-              >
-                + 항목 추가
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveTemplate}
-                className="btn-primary text-xs py-2 px-4"
-              >
-                체크리스트 템플릿 저장 및 스마트폰 배포
-              </button>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleAddField}
+                  className="btn-secondary text-xs py-2 px-3.5"
+                >
+                  + 항목 추가
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTemplate}
+                  className="btn-primary text-xs py-2 px-4"
+                >
+                  체크리스트 템플릿 저장 및 스마트폰 배포
+                </button>
+              </div>
             </div>
           </div>
         </div>

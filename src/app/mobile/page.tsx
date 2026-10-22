@@ -1013,30 +1013,43 @@ export default function MobileWorkerPage() {
             {/* Tab 3: PTW 안전작업허가 신청 */}
             {activeTab === 'ptw' && (
               <div className="space-y-4 text-xs bg-[#1C1C1E] p-4 rounded-2xl border border-white/10">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <FileCheck2 className="w-4 h-4 text-blue-400" />
-                  안전작업허가서(PTW) 모바일 신청
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="font-bold text-sm text-white flex items-center gap-2">
+                    <FileCheck2 className="w-4 h-4 text-blue-400" />
+                    안전작업허가서(PTW) 모바일 신청
+                  </div>
+                  <span className="badge badge-blue text-[9px] font-bold">16개국어 모국어 작성 지원</span>
+                </div>
+
+                <div className="p-2.5 bg-blue-950/40 border border-blue-500/30 rounded-xl text-[11px] text-blue-200">
+                  🌐 <strong>모국어 작성 가능:</strong> 본인의 국적 언어로 작업명, 위험요인, 안전대책을 작성하시면 관리자에게 한국어로 자동 번역되어 전달됩니다.
                 </div>
 
                 <form onSubmit={handleCreatePTWSubmit} className="space-y-3">
                   <div>
-                    <label className="text-slate-300 block mb-1 font-semibold">작업 명칭</label>
+                    <label className="text-slate-300 block mb-1 font-semibold">
+                      작업 명칭 (모국어 입력 가능) *
+                    </label>
                     <input
                       type="text"
                       required
                       value={ptwForm.taskName}
                       onChange={(e) => setPtwForm({ ...ptwForm, taskName: e.target.value })}
+                      placeholder="예: 지붕 고소 용접 작업 (모국어로 작성)"
                       className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-white text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="text-slate-300 block mb-1 font-semibold">작업 구역/위치</label>
+                    <label className="text-slate-300 block mb-1 font-semibold">
+                      작업 구역/위치 (모국어 입력 가능) *
+                    </label>
                     <input
                       type="text"
                       required
                       value={ptwForm.location}
                       onChange={(e) => setPtwForm({ ...ptwForm, location: e.target.value })}
+                      placeholder="예: 제2공장 A동 (모국어로 작성)"
                       className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-white text-xs"
                     />
                   </div>
@@ -1047,6 +1060,7 @@ export default function MobileWorkerPage() {
                       type="text"
                       value={ptwForm.hazardFactors}
                       onChange={(e) => setPtwForm({ ...ptwForm, hazardFactors: e.target.value })}
+                      placeholder="예: 추락 위험, 화재 불티 (모국어로 작성)"
                       className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-white text-xs"
                     />
                   </div>
@@ -1057,6 +1071,7 @@ export default function MobileWorkerPage() {
                       rows={2}
                       value={ptwForm.safetyMeasures}
                       onChange={(e) => setPtwForm({ ...ptwForm, safetyMeasures: e.target.value })}
+                      placeholder="예: 안전대 체결, 소화기 비치 (모국어로 작성)"
                       className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-white text-xs"
                     />
                   </div>
@@ -1082,6 +1097,10 @@ export default function MobileWorkerPage() {
                     ptwList.map((p) => {
                       const isApproved = p.status === 'APPROVED';
                       const isRejected = p.status === 'REJECTED';
+                      const translatedRejection = p.rejectionReason
+                        ? translationService.translateAdminTextToWorkerLang(p.rejectionReason, currentWorker.nationality)
+                        : '';
+
                       return (
                         <div
                           key={p.id}
@@ -1119,8 +1138,15 @@ export default function MobileWorkerPage() {
                             </div>
                           )}
                           {isRejected && p.rejectionReason && (
-                            <div className="p-2 bg-rose-500/10 rounded-lg text-[10.5px] text-rose-300">
-                              반려 사유: {p.rejectionReason}
+                            <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl space-y-1 text-rose-200">
+                              <div className="flex items-center justify-between text-[10px] font-bold text-rose-300">
+                                <span>관리자 반려 사유 ({langInfo.flag} 모국어 자동 번역):</span>
+                                <span className="badge badge-red text-[9px]">자동 번역</span>
+                              </div>
+                              <p className="font-semibold text-xs text-white">{translatedRejection}</p>
+                              <div className="text-[10px] text-rose-300/70 border-t border-rose-500/20 pt-1">
+                                한국어 원문: {p.rejectionReason}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1134,9 +1160,16 @@ export default function MobileWorkerPage() {
             {/* Tab 4: Equipment Usage Request (Request #7) */}
             {activeTab === 'equipment_use' && (
               <div className="space-y-4 text-xs bg-[#1C1C1E] p-4 rounded-2xl border border-white/10">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-blue-400" />
-                  기기/장비 사용 승인 요청 (지게차, 크레인 등)
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="font-bold text-sm text-white flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-blue-400" />
+                    기기/장비 사용 승인 요청 (지게차, 크레인 등)
+                  </div>
+                  <span className="badge badge-blue text-[9px] font-bold">16개국어 모국어 작성</span>
+                </div>
+
+                <div className="p-2.5 bg-blue-950/40 border border-blue-500/30 rounded-xl text-[11px] text-blue-200">
+                  🌐 <strong>모국어 작성 가능:</strong> 작업 목적을 본인의 국적 언어로 작성하시면 관리자에게 한국어로 자동 번역되어 전달됩니다.
                 </div>
 
                 <form onSubmit={handleEquipmentUseSubmit} className="space-y-3">
@@ -1156,12 +1189,15 @@ export default function MobileWorkerPage() {
                   </div>
 
                   <div>
-                    <label className="text-slate-300 block mb-1 font-semibold">작업 목적 *</label>
+                    <label className="text-slate-300 block mb-1 font-semibold">
+                      작업 목적 (모국어 입력 가능) *
+                    </label>
                     <input
                       type="text"
                       required
                       value={equipmentUseForm.purpose}
                       onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, purpose: e.target.value })}
+                      placeholder="예: A동 프레스 금형 부품 하역 및 운반 (모국어로 작성)"
                       className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-white text-xs"
                     />
                   </div>
@@ -1224,6 +1260,10 @@ export default function MobileWorkerPage() {
                   {equipmentUsageLogs.map((log) => {
                     const isApproved = log.status === 'APPROVED';
                     const isRejected = log.status === 'REJECTED';
+                    const translatedReject = log.rejectReason
+                      ? translationService.translateAdminTextToWorkerLang(log.rejectReason, currentWorker.nationality)
+                      : '';
+
                     return (
                       <div
                         key={log.id}
@@ -1263,8 +1303,15 @@ export default function MobileWorkerPage() {
                           </div>
                         )}
                         {isRejected && log.rejectReason && (
-                          <div className="p-1.5 bg-rose-500/10 rounded text-[10px] text-rose-300">
-                            반려 사유: {log.rejectReason}
+                          <div className="p-2.5 bg-rose-500/15 border border-rose-500/30 rounded-xl space-y-1 text-rose-200">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-rose-300">
+                              <span>관리자 반려 사유 ({langInfo.flag} 모국어 자동 번역):</span>
+                              <span className="badge badge-red text-[9px]">자동 번역</span>
+                            </div>
+                            <p className="font-semibold text-xs text-white">{translatedReject}</p>
+                            <div className="text-[10px] text-rose-300/70 border-t border-rose-500/20 pt-1">
+                              한국어 원문: {log.rejectReason}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1277,25 +1324,35 @@ export default function MobileWorkerPage() {
             {/* Tab 5: 스마트 체크리스트 점검 (Request #6) */}
             {activeTab === 'inspect' && (
               <div className="space-y-4 text-xs bg-[#1C1C1E] p-4 rounded-2xl border border-white/10">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4 text-purple-400" />
-                  설비 점검 일지 (웹 실시간 연동)
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="font-bold text-sm text-white flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-purple-400" />
+                    설비 점검 일지 (웹 실시간 연동)
+                  </div>
+                  <span className="badge badge-purple text-[9px] font-bold">16개국어 번역 연동</span>
+                </div>
+
+                <div className="p-2.5 bg-purple-950/40 border border-purple-500/30 rounded-xl text-[11px] text-purple-200">
+                  🌐 <strong>모국어 안내:</strong> 점검 대상 설비 및 측정 기준치가 {langInfo.flag} {langInfo.nativeName} 모국어로 자동 번역되어 표시됩니다.
                 </div>
 
                 <div>
                   <label className="text-slate-300 block mb-1 font-semibold">
-                    점검 대상 설비 선택
+                    점검 대상 설비 선택 ({langInfo.flag} 모국어 번역)
                   </label>
                   <select
                     value={selectedInspectTarget}
                     onChange={(e) => setSelectedInspectTarget(e.target.value)}
                     className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-xs text-white"
                   >
-                    {inspectionTargets.map((target) => (
-                      <option key={target.id} value={target.id} className="bg-gray-900 text-white">
-                        {target.name} ({target.location})
-                      </option>
-                    ))}
+                    {inspectionTargets.map((target) => {
+                      const trans = translationService.translateInspectionTarget(target, selectedLang);
+                      return (
+                        <option key={target.id} value={target.id} className="bg-gray-900 text-white">
+                          {trans.name} ({trans.location})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1337,20 +1394,28 @@ export default function MobileWorkerPage() {
             {/* Tab 6: Before & After 4장 사진 작업 보고서 (Request #4) */}
             {activeTab === 'report' && (
               <div className="space-y-4 text-xs bg-[#1C1C1E] p-4 rounded-2xl border border-white/10">
-                <div className="font-bold text-sm text-white flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-emerald-400" />
-                  Before & After 사진 작업 완료 보고서
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="font-bold text-sm text-white flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-emerald-400" />
+                    Before & After 사진 작업 완료 보고서
+                  </div>
+                  <span className="badge badge-green text-[9px] font-bold">16개국어 모국어 작성</span>
+                </div>
+
+                <div className="p-2.5 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-[11px] text-emerald-200">
+                  🌐 <strong>모국어 작성 가능:</strong> 사진에 대한 문제점(Before) 및 개선 내용(After)을 본인의 국적 언어로 작성하시면 관리자 웹에 한국어로 자동 번역되어 전달됩니다.
                 </div>
 
                 <form onSubmit={handleReportSubmit} className="space-y-3">
                   {/* Auto-filled metadata */}
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
                     <div>
-                      <label className="text-slate-400 block mb-1">작업명 (자동)</label>
+                      <label className="text-slate-400 block mb-1">작업명 (모국어 입력 가능)</label>
                       <input
                         type="text"
                         value={reportForm.taskName}
                         onChange={(e) => setReportForm({ ...reportForm, taskName: e.target.value })}
+                        placeholder="예: 금형 수리 (모국어로 작성)"
                         className="w-full bg-black/60 border border-white/15 rounded-xl p-2 text-white text-xs font-semibold"
                       />
                     </div>
@@ -1373,11 +1438,12 @@ export default function MobileWorkerPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1">작업 위치</label>
+                      <label className="text-slate-400 block mb-1">작업 위치 (모국어 입력 가능)</label>
                       <input
                         type="text"
                         value={reportForm.location}
                         onChange={(e) => setReportForm({ ...reportForm, location: e.target.value })}
+                        placeholder="예: 2공장 성형실 (모국어로 작성)"
                         className="w-full bg-black/60 border border-white/15 rounded-xl p-2 text-white text-xs"
                       />
                     </div>
@@ -1426,13 +1492,13 @@ export default function MobileWorkerPage() {
 
                     <div>
                       <label className="text-red-300 block mb-1 font-semibold text-[11px]">
-                        Before 문제점에 대한 설명 *
+                        Before 문제점에 대한 설명 (모국어 작성 가능) *
                       </label>
                       <textarea
                         rows={2}
                         value={reportForm.beforeDescription}
                         onChange={(e) => setReportForm({ ...reportForm, beforeDescription: e.target.value })}
-                        placeholder="작업 전 파손, 누설, 마모 등 문제점을 기재하세요."
+                        placeholder="작업 전 파손, 누설, 마모 등 문제점을 모국어로 기재하세요."
                         className="w-full bg-black/60 border border-red-500/30 rounded-xl p-2 text-white text-xs"
                       />
                     </div>
@@ -1481,13 +1547,13 @@ export default function MobileWorkerPage() {
 
                     <div>
                       <label className="text-emerald-300 block mb-1 font-semibold text-[11px]">
-                        After 개선이후 설명 *
+                        After 개선이후 설명 (모국어 작성 가능) *
                       </label>
                       <textarea
                         rows={2}
                         value={reportForm.afterDescription}
                         onChange={(e) => setReportForm({ ...reportForm, afterDescription: e.target.value })}
-                        placeholder="개선 완료 사항 및 안전 조치 내용을 기재하세요."
+                        placeholder="개선 완료 사항 및 안전 조치 내용을 모국어로 기재하세요."
                         className="w-full bg-black/60 border border-emerald-500/30 rounded-xl p-2 text-white text-xs"
                       />
                     </div>

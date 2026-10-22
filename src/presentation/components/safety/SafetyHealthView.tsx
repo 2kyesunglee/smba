@@ -585,7 +585,7 @@ export const SafetyHealthView: React.FC = () => {
                   <th>기기 종류</th>
                   <th>기기 번호</th>
                   <th>신청 근로자</th>
-                  <th>사용 목적</th>
+                  <th>사용 목적 (한국어 자동 번역)</th>
                   <th>사용 예정 시간</th>
                   <th>작업 장소</th>
                   <th>면허·사전점검</th>
@@ -601,67 +601,96 @@ export const SafetyHealthView: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredEquipmentLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-[#F9FAFB]">
-                      <td>
-                        <span className="badge badge-blue font-bold text-xs">{log.equipmentType}</span>
-                      </td>
-                      <td className="font-mono text-xs text-[#1D1D1F]">{log.equipmentNumber || '-'}</td>
-                      <td className="font-semibold text-[#1D1D1F]">{log.workerName}</td>
-                      <td className="max-w-xs truncate text-[#6E6E73]">{log.purpose}</td>
-                      <td className="font-mono text-xs text-[#1D1D1F]">{log.startTime} ~ {log.endTime}</td>
-                      <td className="text-xs text-[#6E6E73]">{log.location || '공장 구역'}</td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          {log.hasLicense && <span className="badge badge-green text-[10px]">면허확인</span>}
-                          {log.preCheckCompleted && <span className="badge badge-blue text-[10px]">점검완료</span>}
-                        </div>
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            log.status === 'APPROVED'
-                              ? 'badge-green'
-                              : log.status === 'REJECTED'
-                              ? 'badge-red'
-                              : 'badge-amber'
-                          }`}
-                        >
-                          {log.status === 'APPROVED' ? '승인완료' : log.status === 'REJECTED' ? '반려됨' : '승인대기'}
-                        </span>
-                      </td>
-                      <td className="text-right">
-                        {log.status === 'REQUESTED' ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => {
-                                approveEquipmentUsage(log.id, '김공장장 (안전관리자)');
-                                alert(`[승인 완료] ${log.workerName} 근로자의 ${log.equipmentType} 사용이 승인되었습니다.`);
-                              }}
-                              className="btn-primary text-xs py-1 px-2.5 bg-[#34C759] hover:bg-[#2FB34F]"
-                            >
-                              승인
-                            </button>
-                            <button
-                              onClick={() => {
-                                const reason = prompt('반려 사유를 입력하세요:');
-                                if (reason) {
-                                  rejectEquipmentUsage(log.id, reason, '김공장장 (안전관리자)');
-                                }
-                              }}
-                              className="btn-secondary text-xs py-1 px-2.5 text-[#FF3B30]"
-                            >
-                              반려
-                            </button>
+                  filteredEquipmentLogs.map((log) => {
+                    const worker = workers.find((w) => w.id === log.workerId);
+                    const workerNat = worker?.nationality || 'VN';
+                    const purposeTrans = translationService.translateWorkerTextToKorean(log.purpose, workerNat);
+                    const locationTrans = translationService.translateWorkerTextToKorean(log.location || '공장 구역', workerNat);
+
+                    return (
+                      <tr key={log.id} className="hover:bg-[#F9FAFB]">
+                        <td>
+                          <span className="badge badge-blue font-bold text-xs">{log.equipmentType}</span>
+                        </td>
+                        <td className="font-mono text-xs text-[#1D1D1F]">{log.equipmentNumber || '-'}</td>
+                        <td className="font-semibold text-[#1D1D1F]">
+                          <div>{log.workerName}</div>
+                          {worker && (
+                            <span className="text-[10px] text-[#86868B]">
+                              {translationService.getLanguageInfo(translationService.detectLanguageByNationality(worker.nationality)).flag} {worker.nationality}
+                            </span>
+                          )}
+                        </td>
+                        <td className="max-w-xs text-[#1D1D1F]">
+                          <div className="font-medium text-xs text-[#1D1D1F] leading-snug">
+                            {purposeTrans.koreanText}
                           </div>
-                        ) : (
-                          <span className="text-[11px] text-[#86868B] font-mono">
-                            {log.approvedBy || '-'}
+                          {purposeTrans.isTranslated && (
+                            <div className="text-[10px] text-[#86868B] mt-0.5 flex items-center gap-1">
+                              <span className="badge badge-gray text-[9px] px-1 py-0">{purposeTrans.sourceLangInfo.flag} 원문</span>
+                              <span className="truncate italic">"{purposeTrans.originalText}"</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="font-mono text-xs text-[#1D1D1F]">{log.startTime} ~ {log.endTime}</td>
+                        <td className="text-xs text-[#6E6E73]">
+                          <div>{locationTrans.koreanText}</div>
+                          {locationTrans.isTranslated && (
+                            <div className="text-[9.5px] text-[#86868B] italic">({locationTrans.originalText})</div>
+                          )}
+                        </td>
+                        <td>
+                          <div className="flex items-center gap-1">
+                            {log.hasLicense && <span className="badge badge-green text-[10px]">면허확인</span>}
+                            {log.preCheckCompleted && <span className="badge badge-blue text-[10px]">점검완료</span>}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              log.status === 'APPROVED'
+                                ? 'badge-green'
+                                : log.status === 'REJECTED'
+                                ? 'badge-red'
+                                : 'badge-amber'
+                            }`}
+                          >
+                            {log.status === 'APPROVED' ? '승인완료' : log.status === 'REJECTED' ? '반려됨' : '승인대기'}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="text-right">
+                          {log.status === 'REQUESTED' ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  approveEquipmentUsage(log.id, '김공장장 (안전관리자)');
+                                  alert(`[승인 완료] ${log.workerName} 근로자의 ${log.equipmentType} 사용이 승인되었습니다. 근로자 스마트폰에 [승인완료]로 실시간 반영됩니다.`);
+                                }}
+                                className="btn-primary text-xs py-1 px-2.5 bg-[#34C759] hover:bg-[#2FB34F]"
+                              >
+                                승인
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const reason = prompt('반려 사유를 한국어로 입력하세요 (근로자 모국어로 자동 번역 전송됩니다):');
+                                  if (reason) {
+                                    rejectEquipmentUsage(log.id, reason, '김공장장 (안전관리자)');
+                                  }
+                                }}
+                                className="btn-secondary text-xs py-1 px-2.5 text-[#FF3B30]"
+                              >
+                                반려
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-[#86868B] font-mono">
+                              {log.approvedBy || '-'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -865,66 +894,99 @@ export const SafetyHealthView: React.FC = () => {
               <tr>
                 <th>허가서 번호</th>
                 <th>신청 근로자</th>
-                <th>작업 명칭</th>
+                <th>작업 명칭 (한국어 자동 번역)</th>
                 <th>작업 위치</th>
-                <th>위험 요인</th>
-                <th>안전 대책</th>
+                <th>위험 요인 (한국어 번역)</th>
+                <th>안전 대책 (한국어 번역)</th>
                 <th>상태</th>
                 <th className="text-right">심사 액션</th>
               </tr>
             </thead>
             <tbody>
-              {ptwList.map((ptw) => (
-                <tr key={ptw.id} className="hover:bg-[#F9FAFB]">
-                  <td className="font-mono text-xs font-semibold text-[#1D1D1F]">{ptw.ptwNumber}</td>
-                  <td className="font-medium text-[#1D1D1F]">{ptw.workerName}</td>
-                  <td className="font-bold text-[#1D1D1F]">{ptw.taskName}</td>
-                  <td className="text-xs text-[#6E6E73]">{ptw.location}</td>
-                  <td className="text-xs text-[#FF3B30]">{ptw.hazardFactors}</td>
-                  <td className="text-xs text-[#6E6E73]">{ptw.safetyMeasures}</td>
-                  <td>
-                    <span
-                      className={`badge ${
-                        ptw.status === 'APPROVED'
-                          ? 'badge-green'
-                          : ptw.status === 'REJECTED'
-                          ? 'badge-red'
-                          : 'badge-amber'
-                      }`}
-                    >
-                      {ptw.status === 'APPROVED' ? '승인완료' : ptw.status === 'REJECTED' ? '반려됨' : '승인대기'}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    {ptw.status === 'REQUESTED' ? (
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => {
-                            approvePTW(ptw.id);
-                            alert(`[PTW 승인 완료] ${ptw.taskName} 허가서가 승인되었습니다. 근로자 스마트폰에 [승인완료]로 실시간 반영됩니다.`);
-                          }}
-                          className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
-                        >
-                          승인
-                        </button>
-                        <button
-                          onClick={() => {
-                            const reason = prompt('반려 사유:');
-                            if (reason) rejectPTW(ptw.id, reason);
-                          }}
-                          className="btn-secondary text-xs py-1 px-3 text-[#FF3B30]"
-                        >
-                          반려
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-[11px] text-[#86868B] font-mono">
-                        {ptw.approvedBy || '관리자 승인완료'}
+              {ptwList.map((ptw) => {
+                const worker = workers.find((w) => w.id === ptw.workerId);
+                const workerNat = worker?.nationality || 'VN';
+                const taskNameTrans = translationService.translateWorkerTextToKorean(ptw.taskName, workerNat);
+                const locationTrans = translationService.translateWorkerTextToKorean(ptw.location, workerNat);
+                const hazardTrans = translationService.translateWorkerTextToKorean(ptw.hazardFactors, workerNat);
+                const safetyTrans = translationService.translateWorkerTextToKorean(ptw.safetyMeasures, workerNat);
+
+                return (
+                  <tr key={ptw.id} className="hover:bg-[#F9FAFB]">
+                    <td className="font-mono text-xs font-semibold text-[#1D1D1F]">{ptw.ptwNumber}</td>
+                    <td className="font-medium text-[#1D1D1F]">
+                      <div>{ptw.workerName}</div>
+                      {worker && (
+                        <span className="text-[10px] text-[#86868B]">
+                          {translationService.getLanguageInfo(translationService.detectLanguageByNationality(worker.nationality)).flag} {worker.nationality}
+                        </span>
+                      )}
+                    </td>
+                    <td className="font-bold text-[#1D1D1F]">
+                      <div>{taskNameTrans.koreanText}</div>
+                      {taskNameTrans.isTranslated && (
+                        <div className="text-[10px] text-[#86868B] font-normal italic">
+                          원문: "{taskNameTrans.originalText}"
+                        </div>
+                      )}
+                    </td>
+                    <td className="text-xs text-[#6E6E73]">{locationTrans.koreanText}</td>
+                    <td className="text-xs text-[#FF3B30]">
+                      <div>{hazardTrans.koreanText}</div>
+                      {hazardTrans.isTranslated && (
+                        <div className="text-[9.5px] text-[#86868B] italic">({hazardTrans.originalText})</div>
+                      )}
+                    </td>
+                    <td className="text-xs text-[#6E6E73]">
+                      <div>{safetyTrans.koreanText}</div>
+                      {safetyTrans.isTranslated && (
+                        <div className="text-[9.5px] text-[#86868B] italic">({safetyTrans.originalText})</div>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          ptw.status === 'APPROVED'
+                            ? 'badge-green'
+                            : ptw.status === 'REJECTED'
+                            ? 'badge-red'
+                            : 'badge-amber'
+                        }`}
+                      >
+                        {ptw.status === 'APPROVED' ? '승인완료' : ptw.status === 'REJECTED' ? '반려됨' : '승인대기'}
                       </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="text-right">
+                      {ptw.status === 'REQUESTED' ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => {
+                              approvePTW(ptw.id);
+                              alert(`[PTW 승인 완료] ${ptw.taskName} 허가서가 승인되었습니다. 근로자 스마트폰에 [승인완료]로 실시간 반영됩니다.`);
+                            }}
+                            className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
+                          >
+                            승인
+                          </button>
+                          <button
+                            onClick={() => {
+                              const reason = prompt('반려 사유를 한국어로 입력하세요 (근로자 모국어로 자동 번역 전송됩니다):');
+                              if (reason) rejectPTW(ptw.id, reason);
+                            }}
+                            className="btn-secondary text-xs py-1 px-3 text-[#FF3B30]"
+                          >
+                            반려
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-[#86868B] font-mono">
+                          {ptw.approvedBy || '관리자 승인완료'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
