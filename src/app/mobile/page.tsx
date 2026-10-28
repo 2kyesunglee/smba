@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
 import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
 import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
+import { LocalStateStore, SafetyMaterial } from '@/infrastructure/storage/LocalStateStore';
 import {
   ShieldAlert,
   Send,
@@ -28,6 +29,9 @@ import {
   Truck,
   LogOut,
   Calendar,
+  FileText,
+  X,
+  Download,
 } from 'lucide-react';
 
 export default function MobileWorkerPage() {
@@ -104,58 +108,53 @@ export default function MobileWorkerPage() {
   const [isEduDrawing, setIsEduDrawing] = useState(false);
   const [hasEduSigned, setHasEduSigned] = useState(false);
 
-  // 작업 지시 확인 로컬 상태 및 기본 안내 지시
-  const [confirmedInstructionIds, setConfirmedInstructionIds] = useState<string[]>([]);
-  const initialDefaultInstructions = [
-    {
-      id: 'inst-1',
-      sender: '김공장장 (안전관리자)',
-      koreanText: '오늘 스크러버 배관 용접 작업 주의. 안전그네 및 소화기 2기 배치 필수.',
-      time: '오늘 08:30',
-      priority: 'HIGH',
-    },
-    {
-      id: 'inst-2',
-      sender: '현장반장',
-      koreanText: '오후 2시 폐수처리장 슬러지 압착기 주변 고압세척 작업 시 미끄럼 및 감전 주의.',
-      time: '오늘 09:10',
-      priority: 'NORMAL',
-    },
-    {
-      id: 'inst-3',
-      sender: '안전총괄팀',
-      koreanText: 'B동 보일러실 청관제 투입 작업 시 방독마스크 및 내화학 장갑 착용 필수.',
-      time: '어제 16:00',
-      priority: 'HIGH',
-    },
-  ];
+  // QR Code Scan Detection & LOTO / Emergency Procedures Modal State (Request #9)
+  const [scannedEquipment, setScannedEquipment] = useState<any | null>(null);
 
-  // 관리자가 웹에서 발송한 pushHistories 중 현재 근로자 대상인 작업지시 필터링
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const qrCode = params.get('qr');
+      if (qrCode) {
+        const found = equipmentList.find((e) => e.code === qrCode) || {
+          id: 'qr-scanned',
+          code: qrCode,
+          name: '현장 가동 설비 (QR 코드 라벨 인식)',
+          type: 'LOTO',
+          location: '생산 가공 구역',
+          cautionNotes: '고온 증기 및 감전·협착 위험 구역, 작업 전 LOTO 잠금 및 안전보호구 필수 착용',
+          emergencyProcedures: '비상정지(EMERGENCY STOP) 버튼 즉시 누름 -> 전원·밸브 차단 -> 안전관리자 비상호출(SOS)',
+        };
+        setScannedEquipment(found);
+      }
+    }
+  }, [equipmentList]);
+
+  // Education Document Viewer Modal State (Request #5: 서명 전 첨부파일 보기)
+  const [viewingEduMaterial, setViewingEduMaterial] = useState<SafetyMaterial | null>(null);
+
+  // 작업 지시 확인 로컬 상태
+  const [confirmedInstructionIds, setConfirmedInstructionIds] = useState<string[]>([]);
+
+  // 관리자가 웹에서 발송한 pushHistories 중 현재 근로자 대상인 작업지시만 엄격 필터링 (Request #1)
+  // - 수신 대상이 'ALL' (전체 발송)이거나,
+  // - targetWorkerId 목록에 현재 로그인 근로자의 ID가 포함된 경우에만 해당 근로자 스마트폰에 표출
   const myPushHistories = (pushHistories || []).filter((h) => {
     if (!h.targetWorkerId || h.targetWorkerId === 'ALL') return true;
     const ids = h.targetWorkerId.split(',');
-    return ids.includes(currentWorker?.id || '') || ids.includes(activeWorkerId);
+    return ids.includes(currentWorker?.id || '') || (activeWorkerId && ids.includes(activeWorkerId));
   });
 
-  const displayInstructions = [
-    ...myPushHistories.map((h) => ({
-      id: h.id,
-      sender: '김공장장 (안전관리자)',
-      koreanText: h.instructionText,
-      time: h.sentAt,
-      priority: 'HIGH',
-      isConfirmed: h.status === 'CONFIRMED' || confirmedInstructionIds.includes(h.id),
-      target: h.target,
-      isRealPush: true,
-    })),
-    ...initialDefaultInstructions
-      .filter((inst) => !myPushHistories.some((h) => h.id === inst.id))
-      .map((inst) => ({
-        ...inst,
-        isConfirmed: confirmedInstructionIds.includes(inst.id),
-        isRealPush: false,
-      })),
-  ];
+  const displayInstructions = myPushHistories.map((h) => ({
+    id: h.id,
+    sender: '김공장장 (안전관리자)',
+    koreanText: h.instructionText,
+    time: h.sentAt,
+    priority: 'HIGH',
+    isConfirmed: h.status === 'CONFIRMED' || confirmedInstructionIds.includes(h.id),
+    target: h.target,
+    isRealPush: true,
+  }));
 
   // Touch signature canvas state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -417,6 +416,8 @@ export default function MobileWorkerPage() {
     requestEquipmentUsage({
       equipmentType: equipmentUseForm.equipmentType,
       equipmentNumber: equipmentUseForm.equipmentNumber,
+      workerId: currentWorker.id,
+      workerName: currentWorker.name,
       purpose: equipmentUseForm.purpose,
       startTime: equipmentUseForm.startTime,
       endTime: equipmentUseForm.endTime,
@@ -424,7 +425,8 @@ export default function MobileWorkerPage() {
       hasLicense: equipmentUseForm.hasLicense,
       preCheckCompleted: equipmentUseForm.preCheckCompleted,
     });
-    alert(`[${equipmentUseForm.equipmentType}] 사용 승인 요청이 관리자에게 전송되었습니다.`);
+    LocalStateStore.getInstance().syncToServer();
+    alert(`🎉 [${equipmentUseForm.equipmentType}] 사용 승인 요청이 관리자에게 전송되었습니다.\n\n관리자 웹의 [설비/공정 관리] 및 [안전보건 관리] 화면에 실시간 알림이 등록되었으며 관리자 승인 시 [승인완료]로 상태가 갱신됩니다.`);
   };
 
   const handleInspectionSubmit = (e: React.FormEvent) => {
@@ -940,6 +942,16 @@ export default function MobileWorkerPage() {
                               {translatedDesc}
                             </p>
                           </div>
+
+                          {/* 첨부 교안 문서 보기 버튼 (Request #5: 서명 전 첨부파일 열람) */}
+                          <button
+                            type="button"
+                            onClick={() => setViewingEduMaterial(mat)}
+                            className="btn-secondary w-full justify-center text-xs py-2 bg-white/10 hover:bg-white/15 border border-white/20 text-white rounded-xl flex items-center gap-1.5"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-blue-400" />
+                            <span>📄 관리자 첨부 교안 문서 / 파일 보기</span>
+                          </button>
 
                           {/* Action Button or Signature Pad */}
                           {isSigned ? (
@@ -1655,6 +1667,235 @@ export default function MobileWorkerPage() {
             <span className="text-[9px]">사진보고</span>
           </button>
         </nav>
+      )}
+
+      {/* MODAL 1: Education Document Viewer Modal (Request #5: 서명 전 첨부파일 보기) */}
+      {viewingEduMaterial && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1C1C1E] border border-white/15 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-sm text-white truncate max-w-[200px]">
+                  {viewingEduMaterial.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingEduMaterial(null)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Document Meta */}
+            <div className="p-3 bg-black/50 rounded-xl space-y-1.5 text-[11px] border border-white/10">
+              <div className="flex items-center justify-between text-gray-400">
+                <span>교안 구분:</span>
+                <span className="badge badge-green text-[9px] font-bold">{viewingEduMaterial.category}</span>
+              </div>
+              <div className="flex items-center justify-between text-gray-400">
+                <span>첨부 파일명:</span>
+                <span className="text-white font-medium truncate max-w-[180px]">{viewingEduMaterial.fileName}</span>
+              </div>
+              <div className="flex items-center justify-between text-gray-400">
+                <span>파일 크기:</span>
+                <span className="text-gray-300 font-mono">{viewingEduMaterial.fileSize}</span>
+              </div>
+              <div className="flex items-center justify-between text-gray-400">
+                <span>등록 일자:</span>
+                <span className="text-gray-300">{viewingEduMaterial.uploadedAt}</span>
+              </div>
+            </div>
+
+            {/* Document Preview */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                <span>📄 첨부 교안 문서 열람 (미리보기)</span>
+              </span>
+
+              {viewingEduMaterial.pdfUrl ? (
+                viewingEduMaterial.pdfUrl.startsWith('data:image') ||
+                viewingEduMaterial.fileName.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
+                  <div className="border border-white/10 rounded-xl overflow-hidden bg-black/60 p-2">
+                    <img
+                      src={viewingEduMaterial.pdfUrl}
+                      alt="첨부 교안 이미지"
+                      className="w-full max-h-64 object-contain rounded-lg"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-2 text-center">
+                    <FileText className="w-10 h-10 text-emerald-400 mx-auto" />
+                    <p className="text-xs text-white font-semibold">{viewingEduMaterial.fileName}</p>
+                    <a
+                      href={viewingEduMaterial.pdfUrl}
+                      download={viewingEduMaterial.fileName}
+                      className="btn-primary text-xs py-2 px-4 justify-center inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>첨부 문서 다운로드 열람</span>
+                    </a>
+                  </div>
+                )
+              ) : (
+                <div className="p-3.5 bg-black/60 border border-white/10 rounded-xl space-y-2 text-xs leading-relaxed text-slate-200">
+                  <p className="font-semibold text-white">📌 안전보건 교육 상세 지침 및 수칙:</p>
+                  <p className="text-[11px] text-slate-300">
+                    {viewingEduMaterial.description}
+                  </p>
+                  <div className="p-2 bg-emerald-950/40 border border-emerald-500/20 rounded-lg text-[10.5px] text-emerald-200">
+                    ✓ 안전모 및 필수 보호구 미착용 시 작업 투입 절대 금지<br />
+                    ✓ 비상 상황 발생 시 즉시 작업 중단 및 관리자 통보<br />
+                    ✓ 2인 1조 작업 원칙 및 소화 설비 비치 필수
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Translated Native Language Summary */}
+            <div className="p-3 bg-gradient-to-r from-emerald-950/60 to-blue-950/60 border border-emerald-500/30 rounded-xl space-y-1">
+              <span className="text-[10px] font-bold text-emerald-400 block">
+                {langInfo.flag} {langInfo.name} 모국어 요약 안내:
+              </span>
+              <p className="text-xs text-white leading-relaxed">
+                {translationService.translateInstruction(viewingEduMaterial.description, selectedLang)}
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-white/10 space-y-2">
+              <p className="text-[10.5px] text-gray-400 text-center">
+                교안 내용을 충분히 확인하셨으면 닫기 후 서명을 진행해 주세요.
+              </p>
+              <button
+                type="button"
+                onClick={() => setViewingEduMaterial(null)}
+                className="btn-primary w-full justify-center py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs"
+              >
+                교안 확인 완료 (서명 패드로 이동)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: QR Code Scan Detection & LOTO / Emergency Procedures Modal (Request #9) */}
+      {scannedEquipment && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#1C1C1E] border border-amber-500/50 w-full max-w-sm rounded-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">현장 설비 QR 스캔 안내</h3>
+                  <p className="text-[10px] text-amber-400 font-medium">LOTO 안전절차 및 비상조치 매뉴얼</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setScannedEquipment(null)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Equipment Info Card */}
+            <div className="p-3 bg-black/60 rounded-xl space-y-1.5 text-xs border border-white/10">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400 text-[11px]">설비 명칭:</span>
+                <span className="font-bold text-white text-sm">{scannedEquipment.name}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-400">설치 위치:</span>
+                <span className="text-slate-300">{scannedEquipment.location}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-400">라벨 구분:</span>
+                <span className="badge badge-amber text-[9px] font-bold">{scannedEquipment.type}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-400">QR 식별코드:</span>
+                <span className="text-amber-400 font-mono">{scannedEquipment.code}</span>
+              </div>
+            </div>
+
+            {/* 1. 스캔 안내 (모국어 & 한국어) */}
+            <div className="p-3 bg-blue-950/50 border border-blue-500/30 rounded-xl space-y-1">
+              <span className="text-[10.5px] font-bold text-blue-300 block flex items-center gap-1">
+                <span>{langInfo.flag}</span>
+                <span>스캔 안내 ({langInfo.name} 모국어):</span>
+              </span>
+              <p className="text-xs text-white leading-relaxed font-medium">
+                {translationService.translateInstruction(
+                  '스마트폰 카메라로 해당 설비의 실제 QR코드를 스캔하였습니다. 안전한 정비 및 점검을 위해 아래 LOTO 시건 절차와 비상조치 수칙을 철저히 준수하세요.',
+                  selectedLang
+                )}
+              </p>
+            </div>
+
+            {/* 2. 주의사항 (Caution Notes - 모국어) */}
+            <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl space-y-1.5">
+              <div className="flex items-center justify-between text-[10.5px] font-bold text-amber-300">
+                <span className="flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  작업자 주의사항 (Caution Notes)
+                </span>
+                <span className="text-[9px] text-amber-400">{langInfo.name} 번역</span>
+              </div>
+              <div className="text-xs font-bold text-white leading-relaxed">
+                {translationService.translateInstruction(scannedEquipment.cautionNotes, selectedLang)}
+              </div>
+              <p className="text-[10px] text-slate-400">
+                🇰🇷 한국어 원문: {scannedEquipment.cautionNotes}
+              </p>
+            </div>
+
+            {/* 3. LOTO 안전절차 및 비상조치 매뉴얼 (Emergency Procedures - 모국어) */}
+            <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl space-y-1.5">
+              <div className="flex items-center justify-between text-[10.5px] font-bold text-red-300">
+                <span className="flex items-center gap-1">
+                  <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                  LOTO 안전절차 & 비상조치 매뉴얼
+                </span>
+                <span className="text-[9px] text-red-400">{langInfo.name} 번역</span>
+              </div>
+              <div className="text-xs font-bold text-white leading-relaxed">
+                {translationService.translateInstruction(scannedEquipment.emergencyProcedures, selectedLang)}
+              </div>
+              <p className="text-[10px] text-slate-400">
+                🇰🇷 한국어 원문: {scannedEquipment.emergencyProcedures}
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2 border-t border-white/10 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerSOS(scannedEquipment.location, `${scannedEquipment.name} 구역 긴급 비상호출`);
+                  alert('🚨 관리자 웹 대시보드로 비상 경보가 즉시 전송되었습니다!');
+                  setScannedEquipment(null);
+                }}
+                className="btn-primary flex-1 justify-center py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center gap-1"
+              >
+                <Radio className="w-3.5 h-3.5 animate-pulse" />
+                <span>비상 SOS 호출</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setScannedEquipment(null)}
+                className="btn-secondary flex-1 justify-center py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs"
+              >
+                확인 및 숙지 완료
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -47,17 +47,20 @@ export const EquipmentProcessView: React.FC = () => {
     workReports,
     workers,
     inspectionTargets,
+    equipmentUsageLogs,
     createEquipmentQR,
     createTemplate,
     submitWorkReport,
     addInspectionTarget,
     deleteInspectionTarget,
+    approveEquipmentUsage,
+    rejectEquipmentUsage,
   } = useAppStore();
 
   const translationService = new MultiLanguageTranslationService();
 
   // Active section tab
-  const [activeSection, setActiveSection] = useState<'gallery' | 'logs' | 'targets' | 'qr' | 'builder'>('gallery');
+  const [activeSection, setActiveSection] = useState<'gallery' | 'logs' | 'targets' | 'usageApproval' | 'qr' | 'builder'>('gallery');
 
   // Request #4: Before/After Gallery State & Search & View Mode
   const [reportSearchTerm, setReportSearchTerm] = useState('');
@@ -140,7 +143,7 @@ export const EquipmentProcessView: React.FC = () => {
     alert('🎉 작업 완료 보고서(Before 2장, After 2장)가 성공적으로 등록되었습니다.');
   };
 
-  // Request #6: Inspection Target Form Modal
+  // Inspection Target Form Modal with Dynamic Metrics (고정 텍스트 제거 및 자유 추가/삭제)
   const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
   const [newTarget, setNewTarget] = useState<InspectionTarget>({
     id: '',
@@ -149,11 +152,11 @@ export const EquipmentProcessView: React.FC = () => {
     cycle: '일일',
     manager: '김한국 (정비반장)',
     description: '',
-    metrics: [
-      { name: '가열 온도', unit: '°C', maxLimit: 130 },
-      { name: '공급 압력', unit: 'bar', maxLimit: 3.5, minLimit: 1.0 },
-    ],
+    metrics: [],
   });
+  const [targetMetrics, setTargetMetrics] = useState<Array<{ name: string; unit: string; maxLimit?: number; minLimit?: number }>>([
+    { name: '', unit: '', maxLimit: undefined, minLimit: undefined }
+  ]);
 
   // Request #8: Real QR Code Generator State
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -171,19 +174,16 @@ export const EquipmentProcessView: React.FC = () => {
   const [selectedPrintQr, setSelectedPrintQr] = useState<any | null>(null);
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string>('');
 
-  // Generate real QR code image whenever selectedPrintQr changes (Request #8)
+  // Generate real QR code image whenever selectedPrintQr changes
+  // 스마트폰 기본 카메라 스캔 시 브라우저 링크가 즉시 인식되도록 순수 URL 인코딩
   useEffect(() => {
     if (selectedPrintQr) {
-      const qrPayload = JSON.stringify({
-        id: selectedPrintQr.id,
-        code: selectedPrintQr.code,
-        name: selectedPrintQr.name,
-        type: selectedPrintQr.type,
-        location: selectedPrintQr.location,
-        url: `https://smba-one.vercel.app/mobile?qr=${selectedPrintQr.code}`,
-      });
+      const baseUrl = typeof window !== 'undefined' && window.location.origin
+        ? window.location.origin
+        : 'https://smba-one.vercel.app';
+      const targetUrl = `${baseUrl}/mobile?qr=${encodeURIComponent(selectedPrintQr.code)}`;
 
-      QRCode.toDataURL(qrPayload, {
+      QRCode.toDataURL(targetUrl, {
         width: 320,
         margin: 2,
         color: {
@@ -276,6 +276,22 @@ export const EquipmentProcessView: React.FC = () => {
     alert('실제 스캔 가능한 고해상도 QR 코드가 생성되었습니다.');
   };
 
+  const handleAddMetricField = () => {
+    setTargetMetrics((prev) => [...prev, { name: '', unit: '', maxLimit: undefined, minLimit: undefined }]);
+  };
+
+  const handleRemoveMetricField = (index: number) => {
+    setTargetMetrics((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMetricChange = (index: number, field: 'name' | 'unit' | 'maxLimit' | 'minLimit', value: any) => {
+    setTargetMetrics((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
   const handleSaveTargetSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTarget.name || !newTarget.location) {
@@ -283,9 +299,19 @@ export const EquipmentProcessView: React.FC = () => {
       return;
     }
 
+    const validMetrics = targetMetrics
+      .filter((m) => m.name.trim().length > 0)
+      .map((m) => ({
+        name: m.name.trim(),
+        unit: m.unit.trim() || '단위없음',
+        maxLimit: m.maxLimit !== undefined && m.maxLimit !== null && !isNaN(Number(m.maxLimit)) ? Number(m.maxLimit) : undefined,
+        minLimit: m.minLimit !== undefined && m.minLimit !== null && !isNaN(Number(m.minLimit)) ? Number(m.minLimit) : undefined,
+      }));
+
     addInspectionTarget({
       ...newTarget,
       id: 'target-' + Date.now(),
+      metrics: validMetrics,
     });
 
     setIsTargetModalOpen(false);
@@ -296,13 +322,11 @@ export const EquipmentProcessView: React.FC = () => {
       cycle: '일일',
       manager: '김한국 (정비반장)',
       description: '',
-      metrics: [
-        { name: '가열 온도', unit: '°C', maxLimit: 130 },
-        { name: '공급 압력', unit: 'bar', maxLimit: 3.5, minLimit: 1.0 },
-      ],
+      metrics: [],
     });
+    setTargetMetrics([{ name: '', unit: '', maxLimit: undefined, minLimit: undefined }]);
 
-    alert('신규 설비점검 대상이 등록되었습니다. 근로자 스마트폰 앱에 실시간 반영됩니다.');
+    alert('신규 설비점검 대상이 등록되었습니다. 측정기준치 항목이 근로자 스마트폰 앱에 실시간 반영됩니다.');
   };
 
   return (
@@ -395,6 +419,27 @@ export const EquipmentProcessView: React.FC = () => {
           <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#F5F5F7] text-[#1D1D1F] font-bold">
             {inspectionTargets.length}개
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('usageApproval')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
+            activeSection === 'usageApproval'
+              ? 'bg-white text-[#1D1D1F] shadow-sm font-bold'
+              : 'text-[#6E6E73] hover:text-[#1D1D1F]'
+          }`}
+        >
+          <Wrench className="w-4 h-4 text-amber-500" />
+          <span>기기 사용 승인 관리 (모바일 연동)</span>
+          {equipmentUsageLogs.filter((l) => l.status === 'REQUESTED').length > 0 ? (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-500 text-white font-bold animate-pulse">
+              {equipmentUsageLogs.filter((l) => l.status === 'REQUESTED').length}건 대기
+            </span>
+          ) : (
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-[#F5F5F7] text-[#1D1D1F] font-bold">
+              {equipmentUsageLogs.length}건
+            </span>
+          )}
         </button>
 
         <button
@@ -963,6 +1008,195 @@ export const EquipmentProcessView: React.FC = () => {
         </div>
       )}
 
+      {/* SECTION: Equipment Usage Approval (근로자 모바일 기기 사용 승인 요청 실시간 연동) */}
+      {activeSection === 'usageApproval' && (
+        <div className="space-y-4">
+          {/* Header Banner */}
+          <div className="flex items-center justify-between gap-3 p-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-2xl text-xs text-amber-950 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-amber-600 text-white rounded-lg shadow-sm">
+                <Wrench className="w-4 h-4" />
+              </span>
+              <div>
+                <strong className="font-bold text-[#1D1D1F]">스마트폰 근로자 기기 사용 승인 요청 실시간 연동</strong>
+                <p className="text-[11px] text-[#6E6E73] mt-0.5">
+                  근로자가 스마트폰 "기기신청" 탭에서 지게차, 고소작업대 등의 사용 승인을 요청하면 웹 관리자에게 실시간 표시되며 승인/반려할 수 있습니다.
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-flex badge badge-amber text-[10px] font-bold">
+              모바일 실시간 연동
+            </span>
+          </div>
+
+          {/* Pending Approval Requests */}
+          <div className="glass-card p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-black/5">
+              <div>
+                <h3 className="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-amber-600" />
+                  승인 대기 중인 기기 사용 신청 ({equipmentUsageLogs.filter((l) => l.status === 'REQUESTED').length}건)
+                </h3>
+                <p className="text-xs text-[#86868B] mt-0.5">
+                  승인 완료 시 해당 근로자의 스마트폰 기기신청 상태가 즉시 [승인 완료]로 변경됩니다.
+                </p>
+              </div>
+            </div>
+
+            {equipmentUsageLogs.filter((l) => l.status === 'REQUESTED').length === 0 ? (
+              <div className="text-center py-8 text-xs text-[#86868B] bg-[#F5F5F7] rounded-2xl">
+                현재 대기 중인 기기 사용 승인 요청이 없습니다.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {equipmentUsageLogs
+                  .filter((l) => l.status === 'REQUESTED')
+                  .map((log) => (
+                    <div key={log.id} className="p-4 bg-white rounded-2xl border-2 border-amber-300 shadow-sm space-y-3 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="badge badge-amber font-bold text-[10px] animate-pulse">승인 대기</span>
+                          <span className="text-[11px] text-[#86868B]">
+                            {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-[#0071E3]" />
+                          <span className="font-bold text-sm text-[#1D1D1F]">{log.workerName}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">근로자</span>
+                        </div>
+
+                        <div className="p-2.5 bg-[#F5F5F7] rounded-xl text-xs space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-[#86868B]">신청 기기:</span>
+                            <strong className="text-[#1D1D1F]">{log.equipmentType}</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#86868B]">사용 시간:</span>
+                            <span className="text-[#1D1D1F]">{log.startTime} ~ {log.endTime}</span>
+                          </div>
+                          <div>
+                            <span className="text-[#86868B] block mb-0.5">사용 목적:</span>
+                            <span className="text-[#1D1D1F] font-medium">{log.purpose}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2 border-t border-black/5">
+                        <button
+                          onClick={() => {
+                            const reason = prompt('반려 사유를 입력하세요:', '안전점검 미비 또는 작업구역 중복');
+                            if (reason) {
+                              rejectEquipmentUsage(log.id, reason, '안전관리자');
+                              alert('기기 사용 신청이 반려되었습니다.');
+                            }
+                          }}
+                          className="btn-secondary text-xs flex-1 justify-center py-2 text-[#FF3B30] border-red-200 hover:bg-red-50"
+                        >
+                          반려
+                        </button>
+                        <button
+                          onClick={() => {
+                            approveEquipmentUsage(log.id, '안전관리자');
+                            alert(`[${log.workerName}] 님의 [${log.equipmentType}] 기기 사용이 승인되었습니다.`);
+                          }}
+                          className="btn-primary text-xs flex-1 justify-center py-2 bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+                        >
+                          승인 완료
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* All Equipment Usage History */}
+          <div className="glass-card p-5 space-y-4">
+            <h3 className="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-[#0071E3]" />
+              전체 기기 사용 신청 및 승인 이력 ({equipmentUsageLogs.length}건)
+            </h3>
+
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>신청 일시</th>
+                    <th>신청 근로자</th>
+                    <th>기기 종류</th>
+                    <th>사용 목적</th>
+                    <th>사용 시간</th>
+                    <th>상태</th>
+                    <th>승인/반려 관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {equipmentUsageLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td className="text-[11px] text-[#86868B] whitespace-nowrap">
+                        {log.createdAt ? new Date(log.createdAt).toLocaleString('ko-KR') : '-'}
+                      </td>
+                      <td className="font-semibold text-xs text-[#1D1D1F]">{log.workerName}</td>
+                      <td className="text-xs font-bold text-[#0071E3]">{log.equipmentType}</td>
+                      <td className="text-xs text-[#515154] max-w-xs truncate">{log.purpose}</td>
+                      <td className="text-xs font-mono">{log.startTime} ~ {log.endTime}</td>
+                      <td>
+                        {log.status === 'APPROVED' && (
+                          <span className="badge badge-green text-[10px] font-bold">승인 완료</span>
+                        )}
+                        {log.status === 'REJECTED' && (
+                          <span className="badge badge-red text-[10px] font-bold">반려됨</span>
+                        )}
+                        {log.status === 'REQUESTED' && (
+                          <span className="badge badge-amber text-[10px] font-bold">승인 대기</span>
+                        )}
+                      </td>
+                      <td>
+                        {log.status === 'REQUESTED' ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                approveEquipmentUsage(log.id, '안전관리자');
+                                alert('승인되었습니다.');
+                              }}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold"
+                            >
+                              승인
+                            </button>
+                            <button
+                              onClick={() => {
+                                const reason = prompt('반려 사유:');
+                                if (reason) rejectEquipmentUsage(log.id, reason, '안전관리자');
+                              }}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-[11px] font-bold border border-rose-200"
+                            >
+                              반려
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-[#86868B]">
+                            {log.approvedBy || '-'} {log.rejectReason ? `(${log.rejectReason})` : ''}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {equipmentUsageLogs.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center py-6 text-xs text-[#86868B]">
+                        기기 사용 신청 내역이 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* SECTION 4: Real QR Code Management (Request #8) */}
       {activeSection === 'qr' && (
         <div className="space-y-4">
@@ -1391,9 +1625,87 @@ export const EquipmentProcessView: React.FC = () => {
                   rows={2}
                   value={newTarget.description}
                   onChange={(e) => setNewTarget({ ...newTarget, description: e.target.value })}
-                  placeholder="예: 고온 가열 증기 반응기 (130도 초과 시 비상)"
+                  placeholder="예: 고온 가열 증기 반응기 (비상 시 밸브 차단)"
                   className="w-full bg-[#F5F5F7] border border-black/5 rounded-xl p-2.5 text-xs text-[#1D1D1F]"
                 />
+              </div>
+
+              {/* Dynamic Measurement Criteria Section (관리자가 자유롭게 항목 추가 및 삭제 가능) */}
+              <div className="space-y-2 pt-2 border-t border-black/5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-bold text-[#1D1D1F] block">
+                      설비 측정 기준치 항목 설정 (근로자 모바일 실시간 배포)
+                    </label>
+                    <p className="text-[11px] text-[#86868B]">
+                      상황에 따라 측정기준치의 항목을 자유롭게 추가 또는 삭제할 수 있습니다. (예: 진동, 전류, 압력, 온도 등)
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddMetricField}
+                    className="btn-secondary text-xs py-1 px-2.5 flex items-center gap-1 border-blue-500 text-blue-600 hover:bg-blue-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ 항목 추가</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {targetMetrics.map((metric, idx) => (
+                    <div key={idx} className="p-2.5 bg-[#F5F5F7] rounded-xl border border-black/5 flex flex-wrap items-center gap-2">
+                      <div className="flex-1 min-w-[120px]">
+                        <input
+                          type="text"
+                          placeholder="항목명 (예: 절연 저항, 베어링 진동)"
+                          value={metric.name}
+                          onChange={(e) => handleMetricChange(idx, 'name', e.target.value)}
+                          className="w-full bg-white border border-black/10 rounded-lg p-2 text-xs text-[#1D1D1F]"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <input
+                          type="text"
+                          placeholder="단위 (예: MΩ)"
+                          value={metric.unit}
+                          onChange={(e) => handleMetricChange(idx, 'unit', e.target.value)}
+                          className="w-full bg-white border border-black/10 rounded-lg p-2 text-xs text-[#1D1D1F]"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <input
+                          type="number"
+                          placeholder="최소치"
+                          value={metric.minLimit ?? ''}
+                          onChange={(e) => handleMetricChange(idx, 'minLimit', e.target.value === '' ? undefined : Number(e.target.value))}
+                          className="w-full bg-white border border-black/10 rounded-lg p-2 text-xs text-[#1D1D1F]"
+                        />
+                      </div>
+                      <div className="w-24">
+                        <input
+                          type="number"
+                          placeholder="최대치"
+                          value={metric.maxLimit ?? ''}
+                          onChange={(e) => handleMetricChange(idx, 'maxLimit', e.target.value === '' ? undefined : Number(e.target.value))}
+                          className="w-full bg-white border border-black/10 rounded-lg p-2 text-xs text-[#1D1D1F]"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMetricField(idx)}
+                        className="p-1.5 text-[#FF3B30] hover:bg-red-50 rounded-lg transition-colors"
+                        title="항목 삭제"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {targetMetrics.length === 0 && (
+                    <div className="text-center py-3 text-xs text-[#86868B] bg-[#F5F5F7] rounded-xl">
+                      설정된 측정 기준치가 없습니다. 우측 상단의 '+ 항목 추가' 버튼을 눌러 추가하세요.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-black/5">

@@ -54,4 +54,38 @@ describe('Server API Route /api/sync ETag & Fast Origin Transfer 최적화 테�
     // 데이터 페이로드(전체 DB 객체)가 제거되어 응답 크기가 최소화되어야 함
     expect(json.data).toBeUndefined();
   });
+
+  it('4. 클라이언트가 근로자를 삭제하고 POST한 경우, 서버의 workers 목록에서도 삭제된 근로자가 제거되어야 한다', async () => {
+    // 1) 초기 근로자 2명 등록
+    await POST(
+      new Request('http://localhost:3000/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workers: [
+            { id: 'w-keep', name: '보존 근로자' },
+            { id: 'w-delete', name: '삭제 대상 근로자' },
+          ],
+        }),
+      })
+    );
+
+    // 2) 클라이언트에서 w-delete 삭제 후 w-keep만 남은 목록으로 POST
+    await POST(
+      new Request('http://localhost:3000/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workers: [{ id: 'w-keep', name: '보존 근로자' }],
+        }),
+      })
+    );
+
+    // 3) GET 요청으로 확인했을 때 w-delete는 제거되어 있어야 함 (되살아나면 안 됨)
+    const getRes = await GET();
+    const getJson = await getRes.json();
+    const workers = getJson.data?.workers || [];
+    expect(workers.some((w: any) => w.id === 'w-delete')).toBe(false);
+    expect(workers.some((w: any) => w.id === 'w-keep')).toBe(true);
+  });
 });

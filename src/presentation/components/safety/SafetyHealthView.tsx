@@ -3,7 +3,8 @@
 import React, { useState, useRef } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
 import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
-import { SafetyMaterial, PushHistoryItem } from '@/infrastructure/storage/LocalStateStore';
+import { SafetyMaterial, PushHistoryItem, LocalStateStore } from '@/infrastructure/storage/LocalStateStore';
+import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
   ShieldAlert,
   Send,
@@ -90,7 +91,7 @@ export const SafetyHealthView: React.FC = () => {
     targetDepartment: '전 생산라인 및 정비팀',
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const sizeStr =
@@ -105,6 +106,17 @@ export const SafetyHealthView: React.FC = () => {
         fileSize: sizeStr,
         title: prev.title ? prev.title : defaultTitle,
       }));
+
+      // 이미지 파일인 경우 클라이언트 압축 적용하여 localStorage 용량 초과 방지
+      if (file.type.startsWith('image/')) {
+        try {
+          const compressed = await compressImageFile(file, 1000, 0.7);
+          setUploadedFileUrl(compressed);
+          return;
+        } catch {
+          // fallback
+        }
+      }
 
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -203,6 +215,7 @@ export const SafetyHealthView: React.FC = () => {
     };
 
     addSafetyMaterial(item);
+    LocalStateStore.getInstance().syncToServer();
     setIsUploadModalOpen(false);
     setUploadedFileUrl(null);
     setNewMaterialForm({

@@ -121,13 +121,21 @@ export async function POST(request: Request) {
         ? mergeById(current.pushHistories || [], body.pushHistories, mergePushHistory)
         : current.pushHistories;
 
-      const mergedWorkers = Array.isArray(body.workers)
-        ? mergeById(current.workers || [], body.workers)
+      const updatedWorkers = Array.isArray(body.workers)
+        ? body.workers
         : current.workers;
 
       const mergedSafetyMaterials = Array.isArray(body.safetyMaterials)
-        ? mergeById(current.safetyMaterials || [], body.safetyMaterials)
+        ? body.safetyMaterials
         : current.safetyMaterials;
+
+      const mergedInspectionTargets = Array.isArray(body.inspectionTargets)
+        ? body.inspectionTargets
+        : current.inspectionTargets;
+
+      const mergedEquipmentTypes = Array.isArray(body.equipmentTypes)
+        ? body.equipmentTypes
+        : current.equipmentTypes;
 
       const mergedWorkReports = Array.isArray(body.workReports)
         ? mergeById(current.workReports || [], body.workReports)
@@ -143,8 +151,10 @@ export async function POST(request: Request) {
         ptwList: mergedPtwList,
         equipmentUsageLogs: mergedEquipmentUsageLogs,
         pushHistories: mergedPushHistories,
-        workers: mergedWorkers,
+        workers: updatedWorkers,
         safetyMaterials: mergedSafetyMaterials,
+        inspectionTargets: mergedInspectionTargets,
+        equipmentTypes: mergedEquipmentTypes,
         workReports: mergedWorkReports,
         inspections: mergedInspections,
         lastUpdatedAt: new Date().toISOString(),

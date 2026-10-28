@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
+import { LocalStateStore, SafetyMaterial } from '@/infrastructure/storage/LocalStateStore';
 import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
 import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
@@ -11,6 +12,7 @@ import {
   AlertTriangle,
   FileSignature,
   FileCheck2,
+  FileText,
   QrCode,
   Camera,
   CheckCircle2,
@@ -105,9 +107,19 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
 
   // Education Material Signing State (Request #6)
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
+  const [viewingEduMaterial, setViewingEduMaterial] = useState<SafetyMaterial | null>(null);
   const eduCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isEduDrawing, setIsEduDrawing] = useState(false);
   const [hasEduSigned, setHasEduSigned] = useState(false);
+
+  // Filter push histories: only for this worker or 'ALL'
+  const myPushHistories = (pushHistories || []).filter(
+    (item) =>
+      !item.targetWorkerId ||
+      item.targetWorkerId === 'ALL' ||
+      item.targetWorkerId === currentWorker?.id ||
+      item.targetWorkerId.includes(currentWorker?.id || '')
+  );
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -393,7 +405,10 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
       location: equipmentUseForm.location,
       hasLicense: equipmentUseForm.hasLicense,
       preCheckCompleted: equipmentUseForm.preCheckCompleted,
+      workerId: currentWorker?.id || 'w-1',
+      workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || ''})` : '근로자',
     });
+    LocalStateStore.getInstance().syncToServer();
     alert(`[${equipmentUseForm.equipmentType}] 사용 승인 요청이 관리자 웹으로 전송되었습니다.`);
   };
 
@@ -745,17 +760,17 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                       </p>
                     </div>
 
-                    {/* 실시간 관리자 작업지시서 카드 */}
-                    {pushHistories && pushHistories.length > 0 && (
+                    {/* 실시간 관리자 작업지시서 카드 (수신 대상 본인 또는 전체 대상만 표출) */}
+                    {myPushHistories && myPushHistories.length > 0 && (
                       <div className="p-3 bg-blue-950/50 border border-blue-500/40 rounded-2xl space-y-2">
                         <div className="flex items-center justify-between text-[11px] font-bold text-blue-300">
                           <span className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                            📢 관리자 실시간 작업지시
+                            📢 관리자 실시간 작업지시 (본인 전용)
                           </span>
                           <span className="badge badge-amber text-[9px]">실시간 푸시</span>
                         </div>
-                        {pushHistories.slice(0, 2).map((push) => {
+                        {myPushHistories.slice(0, 3).map((push) => {
                           const translated = translationService.translateInstruction(push.instructionText, selectedLang);
                           const isConfirmed = push.status === 'CONFIRMED';
                           return (
@@ -961,6 +976,17 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                                 <strong>모국어 요약:</strong> {trans}
                               </div>
 
+                              {(mat.fileUrl || mat.pdfUrl) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingEduMaterial(mat)}
+                                  className="w-full py-1.5 px-2 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-500/30 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1.5 transition-colors"
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-blue-400" />
+                                  <span>첨부 교안 열람하기 (서명 전 필독)</span>
+                                </button>
+                              )}
+
                               {isSigned ? (
                                 <div className="text-[10px] text-emerald-400 pt-1 border-t border-white/5 flex justify-between">
                                   <span>이수 서명: {mySig?.signedAt}</span>
@@ -1022,13 +1048,66 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                                   className="btn-primary w-full justify-center text-[11px] py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-bold flex items-center gap-1"
                                 >
                                   <FileSignature className="w-3.5 h-3.5" />
-                                  <span>교안 열람 및 서약 서명하기</span>
+                                  <span>교안 서약 서명하기</span>
                                 </button>
                               )}
                             </div>
                           );
                         })}
                     </div>
+
+                    {/* 교안 첨부파일 열람 모달 */}
+                    {viewingEduMaterial && (
+                      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3">
+                        <div className="bg-[#1C1C1E] border border-white/20 rounded-2xl w-full max-w-sm max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+                          <div className="p-3 bg-black/50 border-b border-white/10 flex items-center justify-between">
+                            <div className="min-w-0 pr-2">
+                              <h4 className="text-xs font-bold text-white truncate">{viewingEduMaterial.title}</h4>
+                              <p className="text-[10px] text-gray-400">{viewingEduMaterial.fileName}</p>
+                            </div>
+                            <button
+                              onClick={() => setViewingEduMaterial(null)}
+                              className="p-1 text-gray-400 hover:text-white rounded-lg"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="flex-1 overflow-y-auto p-3 space-y-3 bg-black/40">
+                            {(() => {
+                              const targetUrl = viewingEduMaterial.fileUrl || viewingEduMaterial.pdfUrl || '';
+                              const isImage = targetUrl.startsWith('data:image') || viewingEduMaterial.fileName.match(/\.(jpg|jpeg|png|webp|gif)$/i);
+                              if (isImage) {
+                                return (
+                                  <img
+                                    src={targetUrl}
+                                    alt={viewingEduMaterial.title}
+                                    className="w-full rounded-xl object-contain max-h-[50vh] bg-black/20"
+                                  />
+                                );
+                              }
+                              return (
+                                <iframe
+                                  src={targetUrl}
+                                  title={viewingEduMaterial.title}
+                                  className="w-full h-[50vh] rounded-xl border border-white/10 bg-white"
+                                />
+                              );
+                            })()}
+                            <div className="p-2.5 bg-blue-950/40 border border-blue-500/30 rounded-xl text-[11px] text-blue-200">
+                              <strong>모국어 요약:</strong> {translationService.translateInstruction(viewingEduMaterial.description, selectedLang)}
+                            </div>
+                          </div>
+                          <div className="p-2.5 bg-black/50 border-t border-white/10 flex justify-end">
+                            <button
+                              onClick={() => setViewingEduMaterial(null)}
+                              className="px-4 py-1.5 bg-[#0071E3] text-white rounded-xl text-xs font-bold"
+                            >
+                              확인 완료 및 닫기
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1607,15 +1686,28 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                           <span className="badge badge-amber">{scannedEquipment.type}</span>
                         </div>
 
-                        <div className="p-2 bg-black/40 rounded-xl text-[11px] text-amber-200">
-                          <strong>주의사항:</strong> {scannedEquipment.cautionNotes}
+                        <div className="p-2.5 bg-black/40 rounded-xl text-[11px] text-amber-200 space-y-1">
+                          <div className="font-bold flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{langInfo.flag} 모국어 작업자 주의사항:</span>
+                          </div>
+                          <p className="text-white font-medium leading-relaxed">
+                            {translationService.translateInstruction(scannedEquipment.cautionNotes, selectedLang)}
+                          </p>
+                          <div className="text-[10px] text-gray-400">🇰🇷 한국어 원문: {scannedEquipment.cautionNotes}</div>
                         </div>
 
-                        <div className="p-2 bg-black/40 rounded-xl text-[11px] text-blue-200">
-                          <strong>
-                            {scannedEquipment.type === 'MSDS' ? '모국어 응급조치:' : 'LOTO 해제 절차:'}
-                          </strong>
-                          <p className="mt-0.5">{scannedEquipment.emergencyProcedures}</p>
+                        <div className="p-2.5 bg-black/40 rounded-xl text-[11px] text-blue-200 space-y-1">
+                          <div className="font-bold flex items-center gap-1">
+                            <ShieldAlert className="w-3.5 h-3.5 text-blue-400" />
+                            <span>
+                              {langInfo.flag} {scannedEquipment.type === 'MSDS' ? '모국어 응급조치 요령:' : '모국어 LOTO 및 비상조치:'}
+                            </span>
+                          </div>
+                          <p className="text-white font-medium leading-relaxed">
+                            {translationService.translateInstruction(scannedEquipment.emergencyProcedures, selectedLang)}
+                          </p>
+                          <div className="text-[10px] text-gray-400">🇰🇷 한국어 원문: {scannedEquipment.emergencyProcedures}</div>
                         </div>
                       </div>
                     )}

@@ -55,6 +55,7 @@ export interface SafetyMaterial {
   fileName: string;
   fileSize: string;
   pdfUrl?: string;
+  fileUrl?: string;
   description: string;
   targetDepartment: string;
   uploadedAt: string;
@@ -814,7 +815,21 @@ export class LocalStateStore {
     try {
       storage.setItem(STORAGE_KEY_STATE, JSON.stringify(this.state));
     } catch {
-      // ignore quota errors
+      // 용량 초과(QuotaExceededError) 방어: 대용량 pdfUrl이나 base64를 경량화하여 반드시 로컬스토리지에 저장
+      try {
+        const lightweightState = {
+          ...this.state,
+          safetyMaterials: this.state.safetyMaterials.map((m) => {
+            if (m.pdfUrl && m.pdfUrl.length > 50000) {
+              return { ...m, pdfUrl: undefined };
+            }
+            return m;
+          }),
+        };
+        storage.setItem(STORAGE_KEY_STATE, JSON.stringify(lightweightState));
+      } catch {
+        // storage quota exceeded even after trimming
+      }
     }
   }
 
