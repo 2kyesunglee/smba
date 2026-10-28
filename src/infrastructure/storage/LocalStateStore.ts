@@ -662,6 +662,8 @@ export class LocalStateStore {
   private state: StoreState;
   private listeners: Set<() => void> = new Set();
   private isStorageListenerAttached = false;
+  private lastEtag: string | null = null;
+  private saveDebounceTimer: any = null;
 
   private constructor() {
     this.state = this.getInitialState();
@@ -711,16 +713,32 @@ export class LocalStateStore {
     };
   }
 
+  private getStorage(): Storage | null {
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      return window.localStorage;
+    }
+    if (typeof localStorage !== 'undefined') {
+      return localStorage;
+    }
+    return null;
+  }
+
   public resetToInitial(): void {
+    if (this.saveDebounceTimer) {
+      clearTimeout(this.saveDebounceTimer);
+      this.saveDebounceTimer = null;
+    }
+    this.lastEtag = null;
     this.state = this.getInitialState();
-    if (this.isStorageAvailable()) {
-      window.localStorage.removeItem(STORAGE_KEY_STATE);
+    const storage = this.getStorage();
+    if (storage) {
+      storage.removeItem(STORAGE_KEY_STATE);
     }
     this.notify();
   }
 
   private isStorageAvailable(): boolean {
-    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+    return this.getStorage() !== null;
   }
 
   private setupStorageListener(): void {
@@ -739,9 +757,10 @@ export class LocalStateStore {
   }
 
   public loadFromStorage(): void {
-    if (!this.isStorageAvailable()) return;
+    const storage = this.getStorage();
+    if (!storage) return;
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY_STATE);
+      const raw = storage.getItem(STORAGE_KEY_STATE);
       if (!raw) return;
       const parsed = JSON.parse(raw);
 
@@ -790,9 +809,10 @@ export class LocalStateStore {
   }
 
   public persistToLocalStorage(): void {
-    if (!this.isStorageAvailable()) return;
+    const storage = this.getStorage();
+    if (!storage) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(this.state));
+      storage.setItem(STORAGE_KEY_STATE, JSON.stringify(this.state));
     } catch {
       // ignore quota errors
     }
@@ -801,27 +821,88 @@ export class LocalStateStore {
   public saveToStorage(): void {
     if (!this.isStorageAvailable()) return;
     try {
+      // 1) 클라이언트 로컬 스토리지는 즉시 동기화(데이터 유실 방지)
       this.persistToLocalStorage();
-      // Optional async server-side sync for different devices (smartphone <-> PC)
+
+      // 2) 서버 POST 동기화는 300ms 디바운스 적용 (연속 입력 시 네트워크 폭주 방지)
       if (typeof fetch !== 'undefined') {
-        fetch('/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.state),
-        }).catch(() => {});
+        if (this.saveDebounceTimer) {
+          clearTimeout(this.saveDebounceTimer);
+        }
+        this.saveDebounceTimer = setTimeout(() => {
+          this.saveDebounceTimer = null;
+          this.syncToServer();
+        }, 300);
       }
     } catch {
       // ignore quota errors
     }
   }
 
+  public async syncToServer(): Promise<void> {
+    if (typeof fetch === 'undefined') return;
+    try {
+      const res = await fetch('/api/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.state),
+      });
+      if (res.ok) {
+        const newEtag = res.headers?.get ? res.headers.get('etag') : null;
+        if (newEtag) {
+          this.lastEtag = newEtag;
+        } else {
+          const json = await res.json().catch(() => null);
+          if (json && json.version) {
+            this.lastEtag = json.version.startsWith('"') ? json.version : `"${json.version}"`;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  public getEtag(): string | null {
+    return this.lastEtag;
+  }
+
+  public setEtag(etag: string | null): void {
+    this.lastEtag = etag;
+  }
+
   public async fetchFromServer(): Promise<void> {
     if (typeof fetch === 'undefined') return;
     try {
-      const res = await fetch('/api/sync');
+      const headers: Record<string, string> = {};
+      if (this.lastEtag) {
+        headers['If-None-Match'] = this.lastEtag;
+      }
+
+      const res = await fetch('/api/sync', { headers });
+
+      // 304 Not Modified: 서버 데이터가 전혀 변경되지 않았음 (페이로드 0바이트, 네트워크 소모 없음)
+      if (res.status === 304) {
+        return;
+      }
+
       if (!res.ok) return;
+
+      const newEtag = res.headers?.get ? res.headers.get('etag') : null;
+      if (newEtag) {
+        this.lastEtag = newEtag;
+      }
+
       const json = await res.json();
-      if (json.success && json.data) {
+      if (json && json.version && !this.lastEtag) {
+        this.lastEtag = json.version.startsWith('"') ? json.version : `"${json.version}"`;
+      }
+
+      if (json && json.unchanged) {
+        return;
+      }
+
+      if (json && json.success && json.data) {
         const parsed = json.data;
         if (parsed.workers && Array.isArray(parsed.workers)) {
           this.state.workers = parsed.workers.map((w: any) => Worker.create(w));

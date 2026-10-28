@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
 import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
+import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
   ShieldAlert,
   Send,
@@ -440,19 +441,27 @@ export default function MobileWorkerPage() {
     setActiveTab('instructions');
   };
 
-  const handlePhotoUpload = (field: 'beforeImg1' | 'beforeImg2' | 'afterImg1' | 'afterImg2', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (field: 'beforeImg1' | 'beforeImg2' | 'afterImg1' | 'afterImg2', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setReportForm((prev) => ({
-            ...prev,
-            [field]: event.target?.result as string,
-          }));
-        }
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImageFile(file, 800, 0.7);
+        setReportForm((prev) => ({
+          ...prev,
+          [field]: compressed,
+        }));
+      } catch {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setReportForm((prev) => ({
+              ...prev,
+              [field]: event.target?.result as string,
+            }));
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

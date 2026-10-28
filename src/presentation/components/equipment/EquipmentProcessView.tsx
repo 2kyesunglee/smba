@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { useAppStore } from '@/presentation/context/AppContext';
 import { MultiLanguageTranslationService } from '@/infrastructure/services/TranslationService';
 import { InspectionTarget } from '@/infrastructure/storage/LocalStateStore';
+import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
   Wrench,
   QrCode,
@@ -85,13 +86,19 @@ export const EquipmentProcessView: React.FC = () => {
   ) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (ev.target?.result) {
-          setNewReportForm((prev) => ({ ...prev, [field]: ev.target?.result as string }));
-        }
-      };
-      reader.readAsDataURL(file);
+      compressImageFile(file, 800, 0.7)
+        .then((compressed) => {
+          setNewReportForm((prev) => ({ ...prev, [field]: compressed }));
+        })
+        .catch(() => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            if (ev.target?.result) {
+              setNewReportForm((prev) => ({ ...prev, [field]: ev.target?.result as string }));
+            }
+          };
+          reader.readAsDataURL(file);
+        });
     }
   };
 

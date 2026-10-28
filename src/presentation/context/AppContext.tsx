@@ -67,14 +67,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setState({ ...store.getState() });
     });
 
-    // 3초 주기 다중 디바이스 서버 동기화 폴링 (스마트폰 모바일 <-> PC 관리자 웹)
-    const interval = setInterval(() => {
-      store.fetchFromServer();
-    }, 3000);
+    // Smart Polling: 브라우저 탭 가시성(Visibility) 연동
+    // - 화면 활성화 시: 8초 주기 ETag 조건부 폴링 (304 반환으로 트래픽 0에 수렴)
+    // - 백그라운드 전환 시: 폴링 중단 (불필요한 Vercel Fast Origin Transfer 및 서버리스 인보케이션 100% 차단)
+    // - 화면 복귀 시: 즉시 1회 최신 동기화
+    let intervalId: any = null;
+
+    const startPolling = () => {
+      if (!intervalId) {
+        intervalId = setInterval(() => {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+            return;
+          }
+          store.fetchFromServer();
+        }, 8000);
+      }
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        store.fetchFromServer();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      if (document.visibilityState === 'visible') {
+        startPolling();
+      }
+    } else {
+      startPolling();
+    }
 
     return () => {
       unsubscribe();
-      clearInterval(interval);
+      stopPolling();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, [store]);
 

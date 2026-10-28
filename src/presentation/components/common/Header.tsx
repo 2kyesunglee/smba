@@ -53,7 +53,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileView, onLogout }) =>
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const apkUrl = `${baseUrl.replace(/\/$/, '')}/downloads/safeguard-ai-mobile.apk`;
+  // Direct Storage URL support to bypass Vercel Origin Transfer (S3 / Blob / Releases)
+  const directApkUrl = process.env.NEXT_PUBLIC_APK_DOWNLOAD_URL;
+  const apkUrl = directApkUrl || `${baseUrl.replace(/\/$/, '')}/downloads/safeguard-ai-mobile.apk`;
   const webUrl = `${baseUrl.replace(/\/$/, '')}/mobile`;
 
   useEffect(() => {

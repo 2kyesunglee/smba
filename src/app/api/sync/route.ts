@@ -61,12 +61,46 @@ function mergePushHistory(curr: any, inc: any) {
   return { ...inc, ...curr };
 }
 
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    data: globalObj[globalKey],
-    timestamp: new Date().toISOString(),
-  });
+const versionKey = Symbol.for('smba.serverVersion');
+if (!globalObj[versionKey]) {
+  globalObj[versionKey] = '1';
+}
+
+export async function GET(request?: Request) {
+  const currentData = globalObj[globalKey];
+  const version = globalObj[versionKey] || '1';
+  const etag = `"${version}"`;
+
+  // Check client If-None-Match header
+  if (request && typeof request.headers?.get === 'function') {
+    const clientEtag = request.headers.get('if-none-match');
+    if (clientEtag && (clientEtag === etag || clientEtag === version)) {
+      // 304 Not Modified: 서버 데이터가 전혀 변경되지 않았음 (페이로드 0바이트, CDN 캐시 히트)
+      return new NextResponse(null, {
+        status: 304,
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'private, no-cache, must-revalidate',
+        },
+      });
+    }
+  }
+
+  return NextResponse.json(
+    {
+      success: true,
+      version,
+      data: currentData,
+      timestamp: new Date().toISOString(),
+    },
+    {
+      status: 200,
+      headers: {
+        'ETag': etag,
+        'Cache-Control': 'private, no-cache, must-revalidate',
+      },
+    }
+  );
 }
 
 export async function POST(request: Request) {
@@ -115,12 +149,30 @@ export async function POST(request: Request) {
         inspections: mergedInspections,
         lastUpdatedAt: new Date().toISOString(),
       };
+
+      // Bump server version
+      globalObj[versionKey] = Date.now().toString();
     }
-    return NextResponse.json({
-      success: true,
-      data: globalObj[globalKey],
-      message: 'Server sync completed successfully',
-    });
+
+    const version = globalObj[versionKey] || '1';
+    const etag = `"${version}"`;
+
+    // Data Projection: 성공 메타데이터만 반환하여 네트워크 페이로드 최소화 (전체 DB 재전송 방지)
+    return NextResponse.json(
+      {
+        success: true,
+        version,
+        lastUpdatedAt: globalObj[globalKey]?.lastUpdatedAt,
+        message: 'Server sync completed successfully',
+      },
+      {
+        status: 200,
+        headers: {
+          'ETag': etag,
+          'Cache-Control': 'private, no-cache, must-revalidate',
+        },
+      }
+    );
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message || 'Sync failed' },
