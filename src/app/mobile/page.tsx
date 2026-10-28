@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
-import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
+import { translationServiceInstance, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
 import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import { LocalStateStore, SafetyMaterial } from '@/infrastructure/storage/LocalStateStore';
 import {
@@ -58,7 +58,7 @@ export default function MobileWorkerPage() {
     updatePushHistory,
   } = useAppStore();
 
-  const translationService = new MultiLanguageTranslationService();
+  const translationService = translationServiceInstance;
 
   // Login / Auth State (Request #1: 최초 접속 시 미로그인 상태로 로그인 창 표시)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -161,12 +161,13 @@ export default function MobileWorkerPage() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
 
-  // PTW Form State
+  // PTW Form State (Initialized in worker's native language)
+  const initialDefaults = translationService.getWorkerFormDefaults(selectedLang);
   const [ptwForm, setPtwForm] = useState({
-    taskName: '스크러버 배관 플랜지 조임 및 고소 점검',
-    location: 'A동 화학탱크 상부 배관',
-    hazardFactors: '추락 위험, 가스 누출 가능성',
-    safetyMeasures: '안전대 2개소 체결, 가스측정기 휴대, 소화기 배치',
+    taskName: initialDefaults.ptw.taskName,
+    location: initialDefaults.ptw.location,
+    hazardFactors: initialDefaults.ptw.hazardFactors,
+    safetyMeasures: initialDefaults.ptw.safetyMeasures,
   });
 
   // Inspection Form State (Synced with Admin inspection targets)
@@ -181,38 +182,55 @@ export default function MobileWorkerPage() {
   const [equipmentUseForm, setEquipmentUseForm] = useState({
     equipmentType: equipmentTypes[0] || '지게차',
     equipmentNumber: '1호기',
-    purpose: '원자재 하역 및 창고 이송',
+    purpose: initialDefaults.equipmentUse.purpose,
     startTime: '2026-10-20 09:00',
     endTime: '2026-10-20 12:00',
-    location: 'A동 야적장',
+    location: initialDefaults.equipmentUse.location,
     hasLicense: true,
     preCheckCompleted: true,
   });
 
   // Before/After Form State (Request #4)
   const [reportForm, setReportForm] = useState({
-    taskName: '보일러실 배관 보온재 교체 및 청소',
+    taskName: initialDefaults.report.taskName,
     workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || ''})` : '작업자',
     workDate: '',
-    location: 'B동 보일러실 2구역',
+    location: initialDefaults.report.location,
     beforeImg1: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
     beforeImg2: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
     afterImg1: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
     afterImg2: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-    beforeDescription: '노후 보온재 탈락으로 인한 열 손실 및 작업자 접촉 화상 위험 발생.',
-    afterDescription: '고효율 난연성 글라스울 재시공 및 외장 알루미늄 커버 체결 완료.',
-    description: '보온재 교체 작업 완료함.',
+    beforeDescription: initialDefaults.report.beforeDescription,
+    afterDescription: initialDefaults.report.afterDescription,
+    description: initialDefaults.report.description,
   });
 
-  // Auto-fill worker details and workDate
+  // Sync form defaults into the worker's native language when selectedLang or worker changes
   useEffect(() => {
+    const defaults = translationService.getWorkerFormDefaults(selectedLang);
     const today = new Date().toISOString().split('T')[0];
+    setPtwForm({
+      taskName: defaults.ptw.taskName,
+      location: defaults.ptw.location,
+      hazardFactors: defaults.ptw.hazardFactors,
+      safetyMeasures: defaults.ptw.safetyMeasures,
+    });
+    setEquipmentUseForm((prev) => ({
+      ...prev,
+      purpose: defaults.equipmentUse.purpose,
+      location: defaults.equipmentUse.location,
+    }));
     setReportForm((prev) => ({
       ...prev,
+      taskName: defaults.report.taskName,
+      location: defaults.report.location,
+      beforeDescription: defaults.report.beforeDescription,
+      afterDescription: defaults.report.afterDescription,
+      description: defaults.report.description,
       workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || currentWorker.nationality})` : prev.workerName,
       workDate: today,
     }));
-  }, [currentWorker?.id]);
+  }, [selectedLang, currentWorker?.id]);
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -826,8 +844,16 @@ export default function MobileWorkerPage() {
                 </div>
 
                 <div className="p-3 bg-black/50 rounded-xl space-y-2 border border-white/10">
-                  <span className="font-bold text-blue-300 block">오늘의 안전수칙:</span>
-                  <p className="text-slate-300 text-xs leading-relaxed">
+                  <span className="font-bold text-blue-300 block">
+                    {langInfo.flag} 오늘의 안전수칙 ({langInfo.name} 모국어 자동 번역):
+                  </span>
+                  <div className="text-white text-xs font-semibold leading-relaxed space-y-1 bg-blue-950/30 p-2.5 rounded-lg border border-blue-500/20">
+                    <p>1. {translationService.translateInstruction('안전모 턱끈 체결 및 안전대 2개소 걸이', selectedLang)}</p>
+                    <p>2. {translationService.translateInstruction('용접 작업 전 소화기 배치 및 불티 비산방지포 설치', selectedLang)}</p>
+                    <p>3. {translationService.translateInstruction('이상 가스 감지 시 즉시 작업 중지 및 관리자 통보', selectedLang)}</p>
+                  </div>
+                  <p className="text-slate-400 text-[10.5px] leading-relaxed pt-1 border-t border-white/10">
+                    🇰🇷 한국어 원문:<br />
                     1. 안전모 턱끈 체결 및 안전대 2개소 걸이<br />
                     2. 용접 작업 전 소화기 배치 및 불티 비산방지포 설치<br />
                     3. 이상 가스 감지 시 즉시 작업 중지 및 관리자 통보
@@ -896,6 +922,8 @@ export default function MobileWorkerPage() {
                       const mySignature = mat.signatures.find((s) => s.workerId === currentWorker.id);
                       const isSigned = !!mySignature;
                       const isSelected = selectedMaterialId === mat.id;
+                      const translatedTitle = translationService.translateInstruction(mat.title, selectedLang);
+                      const translatedCat = translationService.translateInstruction(mat.category, selectedLang);
                       const translatedDesc = translationService.translateInstruction(mat.description, selectedLang);
 
                       return (
@@ -911,11 +939,14 @@ export default function MobileWorkerPage() {
                             <div>
                               <div className="flex items-center gap-1.5 mb-1">
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
-                                  {mat.category}
+                                  {translatedCat}
                                 </span>
                                 <span className="text-[10px] text-slate-400">등록일: {mat.uploadedAt}</span>
                               </div>
-                              <h3 className="font-bold text-sm text-white">{mat.title}</h3>
+                              <h3 className="font-bold text-sm text-white">{translatedTitle}</h3>
+                              {selectedLang !== 'ko' && translatedTitle !== mat.title && (
+                                <p className="text-[10px] text-slate-400 mt-0.5">🇰🇷 원문: {mat.title}</p>
+                              )}
                               <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
                                 <span>📄 {mat.fileName}</span>
                                 <span>({mat.fileSize})</span>
@@ -1118,8 +1149,14 @@ export default function MobileWorkerPage() {
                     ptwList.map((p) => {
                       const isApproved = p.status === 'APPROVED';
                       const isRejected = p.status === 'REJECTED';
+                      const translatedTask = /[가-힣]/.test(p.taskName)
+                        ? translationService.translateInstruction(p.taskName, selectedLang)
+                        : p.taskName;
+                      const translatedLoc = /[가-힣]/.test(p.location)
+                        ? translationService.translateInstruction(p.location, selectedLang)
+                        : p.location;
                       const translatedRejection = p.rejectionReason
-                        ? translationService.translateAdminTextToWorkerLang(p.rejectionReason, currentWorker.nationality)
+                        ? translationService.translateInstruction(p.rejectionReason, selectedLang)
                         : '';
 
                       return (
@@ -1147,9 +1184,9 @@ export default function MobileWorkerPage() {
                               {isApproved ? '✅ 승인완료 (작업착수 가능)' : isRejected ? '❌ 반려됨' : '⏳ 관리자 심사 대기'}
                             </span>
                           </div>
-                          <div className="font-bold text-white text-sm">{p.taskName}</div>
+                          <div className="font-bold text-white text-sm">{translatedTask}</div>
                           <div className="text-[11px] text-slate-300 flex items-center justify-between">
-                            <span>위치: {p.location}</span>
+                            <span>위치: {translatedLoc}</span>
                             <span className="text-slate-400 text-[10px]">{p.workDate}</span>
                           </div>
                           {isApproved && (
@@ -1201,11 +1238,14 @@ export default function MobileWorkerPage() {
                       onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, equipmentType: e.target.value })}
                       className="w-full bg-black/60 border border-white/15 rounded-xl p-2.5 text-white text-xs"
                     >
-                      {equipmentTypes.map((type) => (
-                        <option key={type} value={type} className="bg-gray-900 text-white">
-                          {type}
-                        </option>
-                      ))}
+                      {equipmentTypes.map((type) => {
+                        const transType = translationService.translateInstruction(type, selectedLang);
+                        return (
+                          <option key={type} value={type} className="bg-gray-900 text-white">
+                            {selectedLang !== 'ko' && transType !== type ? `${transType} (${type})` : type}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
 
@@ -1281,8 +1321,17 @@ export default function MobileWorkerPage() {
                   {equipmentUsageLogs.map((log) => {
                     const isApproved = log.status === 'APPROVED';
                     const isRejected = log.status === 'REJECTED';
+                    const transEqType = /[가-힣]/.test(log.equipmentType)
+                      ? translationService.translateInstruction(log.equipmentType, selectedLang)
+                      : log.equipmentType;
+                    const transPurpose = /[가-힣]/.test(log.purpose)
+                      ? translationService.translateInstruction(log.purpose, selectedLang)
+                      : log.purpose;
+                    const transLoc = log.location && /[가-힣]/.test(log.location)
+                      ? translationService.translateInstruction(log.location, selectedLang)
+                      : log.location;
                     const translatedReject = log.rejectReason
-                      ? translationService.translateAdminTextToWorkerLang(log.rejectReason, currentWorker.nationality)
+                      ? translationService.translateInstruction(log.rejectReason, selectedLang)
                       : '';
 
                     return (
@@ -1298,8 +1347,8 @@ export default function MobileWorkerPage() {
                       >
                         <div className="flex justify-between items-center">
                           <div className="font-bold text-white flex items-center gap-1.5">
-                            <span className="text-blue-400">[{log.equipmentType}]</span>
-                            <span>{log.purpose}</span>
+                            <span className="text-blue-400">[{transEqType}]</span>
+                            <span>{transPurpose}</span>
                           </div>
                           <span
                             className={`badge ${
@@ -1315,7 +1364,7 @@ export default function MobileWorkerPage() {
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center justify-between">
                           <span>사용시간: {log.startTime} ~ {log.endTime}</span>
-                          {log.location && <span>구역: {log.location}</span>}
+                          {transLoc && <span>구역: {transLoc}</span>}
                         </div>
                         {isApproved && (
                           <div className="p-1.5 bg-emerald-500/10 rounded text-[10px] text-emerald-300 flex items-center gap-1">
@@ -1380,7 +1429,7 @@ export default function MobileWorkerPage() {
                 <form onSubmit={handleInspectionSubmit} className="space-y-3">
                   <div>
                     <label className="text-slate-300 block mb-1 font-semibold">
-                      가열 온도 (°C) - [기준치 130°C 초과 시 즉시 경보 발령]
+                      {translationService.translateInstruction('가열 온도 (°C) - 기준치 130°C 초과 시 즉시 경보 발령', selectedLang)}
                     </label>
                     <input
                       type="number"
@@ -1393,7 +1442,9 @@ export default function MobileWorkerPage() {
                   </div>
 
                   <div>
-                    <label className="text-slate-300 block mb-1 font-semibold">공급 압력 (bar)</label>
+                    <label className="text-slate-300 block mb-1 font-semibold">
+                      {translationService.translateInstruction('공급 압력 (bar)', selectedLang)}
+                    </label>
                     <input
                       type="number"
                       step="0.1"
@@ -1808,11 +1859,15 @@ export default function MobileWorkerPage() {
             <div className="p-3 bg-black/60 rounded-xl space-y-1.5 text-xs border border-white/10">
               <div className="flex items-center justify-between">
                 <span className="text-gray-400 text-[11px]">설비 명칭:</span>
-                <span className="font-bold text-white text-sm">{scannedEquipment.name}</span>
+                <span className="font-bold text-white text-sm">
+                  {translationService.translateInstruction(scannedEquipment.name, selectedLang)}
+                </span>
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-gray-400">설치 위치:</span>
-                <span className="text-slate-300">{scannedEquipment.location}</span>
+                <span className="text-slate-300">
+                  {translationService.translateInstruction(scannedEquipment.location, selectedLang)}
+                </span>
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-gray-400">라벨 구분:</span>

@@ -125,5 +125,84 @@ describe('양방향 다국어 자동 번역 시스템 (TDD Red-Green-Refactor)',
       expect(translated.length).toBe(2);
       expect(translated[0]).not.toBe(checklistItems[0]);
     });
+
+    it('자유 입력 한국어 작업지시문 및 반려 사유가 한글 잔존 없이 각 국가 언어로 자연스럽게 번역되어야 한다', () => {
+      const freeKo1 = '오늘 스크러버 배관 용접 작업 주의. 안전그네 및 소화기 배치 필수.';
+      const freeKo2 = '오후 2시 B동 보일러실 배관 청소 및 안전점검 실시 바랍니다.';
+      const freeReject = '안전점검 미비 또는 작업구역 중복으로 반려합니다.';
+
+      const vi1 = service.translateAdminTextToWorkerLang(freeKo1, 'VN');
+      const mn1 = service.translateAdminTextToWorkerLang(freeKo1, 'MN');
+      const ph1 = service.translateAdminTextToWorkerLang(freeKo1, 'PH');
+      const th1 = service.translateAdminTextToWorkerLang(freeKo1, 'TH');
+      const id1 = service.translateAdminTextToWorkerLang(freeKo1, 'ID');
+      const uz1 = service.translateAdminTextToWorkerLang(freeKo1, 'UZ');
+      const zh1 = service.translateAdminTextToWorkerLang(freeKo1, 'CN');
+
+      // 번역 결과에 한글이 그대로 남아있지 않아야 함
+      expect(vi1).not.toMatch(/[가-힣]/);
+      expect(mn1).not.toMatch(/[가-힣]/);
+      expect(ph1).not.toMatch(/[가-힣]/);
+      expect(th1).not.toMatch(/[가-힣]/);
+      expect(id1).not.toMatch(/[가-힣]/);
+      expect(uz1).not.toMatch(/[가-힣]/);
+      expect(zh1).not.toMatch(/[가-힣]/);
+
+      const vi2 = service.translateAdminTextToWorkerLang(freeKo2, 'VN');
+      const viReject = service.translateAdminTextToWorkerLang(freeReject, 'VN');
+      expect(vi2).not.toMatch(/[가-힣]/);
+      expect(viReject).not.toMatch(/[가-힣]/);
+    });
+  });
+
+  describe('3. 근로자 스마트폰 국적별 모국어 기본 양식 및 역방향 한국어 완벽 번역', () => {
+    it('근로자의 국적에 따라 스마트폰 입력 폼(PTW, 기기사용, 사진보고서) 기본값이 해당 국가 언어로 제공되어야 한다', () => {
+      const vnDefaults = service.getWorkerFormDefaults('VN');
+      expect(vnDefaults.ptw.taskName).not.toMatch(/[가-힣]/);
+      expect(vnDefaults.equipmentUse.purpose).not.toMatch(/[가-힣]/);
+      expect(vnDefaults.report.taskName).not.toMatch(/[가-힣]/);
+      expect(vnDefaults.report.beforeDescription).not.toMatch(/[가-힣]/);
+      expect(vnDefaults.report.afterDescription).not.toMatch(/[가-힣]/);
+
+      const mnDefaults = service.getWorkerFormDefaults('MN');
+      expect(mnDefaults.ptw.taskName).not.toMatch(/[가-힣]/);
+      expect(mnDefaults.equipmentUse.purpose).not.toMatch(/[가-힣]/);
+
+      const krDefaults = service.getWorkerFormDefaults('KR');
+      expect(krDefaults.ptw.taskName).toMatch(/[가-힣]/);
+    });
+
+    it('근로자가 스마트폰에서 자신의 국적 언어로 작성한 모든 항목이 관리자 웹에서 자연스러운 한국어로 번역되어야 한다', () => {
+      const nationalities = ['VN', 'MN', 'PH', 'TH', 'ID', 'UZ', 'CN', 'US'];
+      for (const nat of nationalities) {
+        const defaults = service.getWorkerFormDefaults(nat);
+        const ptwTaskKo = service.translateWorkerTextToKorean(defaults.ptw.taskName, nat);
+        const equipPurposeKo = service.translateWorkerTextToKorean(defaults.equipmentUse.purpose, nat);
+        const reportBeforeKo = service.translateWorkerTextToKorean(defaults.report.beforeDescription, nat);
+        const reportAfterKo = service.translateWorkerTextToKorean(defaults.report.afterDescription, nat);
+
+        // 단순 '[번역 ...]' 접두사만 붙인 미번역 상태가 아니어야 하며, 한국어가 포함되어야 함
+        expect(ptwTaskKo.koreanText).not.toContain('[번역');
+        expect(ptwTaskKo.koreanText).toMatch(/[가-힣]/);
+        expect(equipPurposeKo.koreanText).not.toContain('[번역');
+        expect(equipPurposeKo.koreanText).toMatch(/[가-힣]/);
+        expect(reportBeforeKo.koreanText).not.toContain('[번역');
+        expect(reportBeforeKo.koreanText).toMatch(/[가-힣]/);
+        expect(reportAfterKo.koreanText).not.toContain('[번역');
+        expect(reportAfterKo.koreanText).toMatch(/[가-힣]/);
+      }
+    });
+
+    it('근로자가 자유롭게 입력한 외국어 문장도 단어/구문 사전을 통해 한국어로 의미 있게 번역되어야 한다', () => {
+      const customVN = 'Sửa chữa đường ống khu B và kiểm tra van an toàn';
+      const resVN = service.translateWorkerTextToKorean(customVN, 'VN');
+      expect(resVN.koreanText).not.toContain('[번역');
+      expect(resVN.koreanText).toMatch(/배관|수리|밸브|점검/);
+
+      const customMN = 'Б байрны бойлерийн хоолойг засварлаж цэвэрлэсэн';
+      const resMN = service.translateWorkerTextToKorean(customMN, 'MN');
+      expect(resMN.koreanText).not.toContain('[번역');
+      expect(resMN.koreanText).toMatch(/보일러|배관|수리|청소/);
+    });
   });
 });

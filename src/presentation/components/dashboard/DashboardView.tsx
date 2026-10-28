@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
+import { translationServiceInstance } from '@/infrastructure/services/TranslationService';
 import {
   Users,
   ShieldCheck,
@@ -196,29 +197,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {pendingPTWList.map((ptw) => (
-                      <div
-                        key={ptw.id}
-                        className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-between border border-slate-200/70 transition-colors"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-blue-600 font-bold">{ptw.ptwNumber}</span>
-                            <span className="text-xs font-bold text-slate-900">{ptw.taskName}</span>
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            신청자: {ptw.workerName} · 작업위치: {ptw.location}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => approvePTW(ptw.id)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
+                    {pendingPTWList.map((ptw) => {
+                      const matchedWorker = workers.find((w) => w.id === ptw.workerId || w.name === ptw.workerName);
+                      const workerNat = matchedWorker?.nationality || 'VN';
+                      const taskTrans = translationServiceInstance.translateWorkerTextToKorean(ptw.taskName, workerNat);
+                      const locTrans = translationServiceInstance.translateWorkerTextToKorean(ptw.location, workerNat);
+
+                      return (
+                        <div
+                          key={ptw.id}
+                          className="p-3 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-between border border-slate-200/70 transition-colors"
                         >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          허가 승인
-                        </button>
-                      </div>
-                    ))}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-mono text-blue-600 font-bold">{ptw.ptwNumber}</span>
+                              <span className="text-xs font-bold text-slate-900">{taskTrans.koreanText}</span>
+                              {taskTrans.isTranslated && (
+                                <span className="badge badge-blue text-[9px]">
+                                  {taskTrans.originalFlag} 자동번역
+                                </span>
+                              )}
+                            </div>
+                            {taskTrans.isTranslated && (
+                              <div className="text-[10px] text-blue-600 mt-0.5">
+                                🌐 원문 ({taskTrans.detectedLanguage}): {ptw.taskName}
+                              </div>
+                            )}
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              신청자: {ptw.workerName} · 작업위치: {locTrans.koreanText}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => approvePTW(ptw.id)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-xl flex items-center gap-1 transition-colors shadow-sm"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            허가 승인
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -254,25 +272,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateTab }) =
                   현재 모든 설비가 정상 기준 범위 내에서 안전하게 가동 중입니다.
                 </div>
               ) : (
-                abnormalInspections.map((insp) => (
-                  <div
-                    key={insp.id}
-                    className="p-4 bg-rose-50/70 border border-rose-200 rounded-xl space-y-2 relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 w-2 h-full bg-rose-500"></div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-rose-900">{insp.equipmentName}</span>
-                      <span className="badge badge-red text-xs">주의: 기준치 초과</span>
+                abnormalInspections.map((insp) => {
+                  const matchedWorker = workers.find((w) => w.id === insp.workerId || w.name === insp.workerName);
+                  const workerNat = matchedWorker?.nationality || 'VN';
+                  const eqTrans = translationServiceInstance.translateWorkerTextToKorean(insp.equipmentName, workerNat);
+                  const notesTrans = translationServiceInstance.translateWorkerTextToKorean(insp.abnormalNotes || '', workerNat);
+
+                  return (
+                    <div
+                      key={insp.id}
+                      className="p-4 bg-rose-50/70 border border-rose-200 rounded-xl space-y-2 relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 w-2 h-full bg-rose-500"></div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-rose-900">{eqTrans.koreanText}</span>
+                        <span className="badge badge-red text-xs">주의: 기준치 초과</span>
+                      </div>
+                      <div className="bg-white p-2.5 rounded-lg text-xs font-mono text-rose-700 border border-rose-100 font-semibold space-y-1">
+                        <div>{notesTrans.koreanText}</div>
+                        {notesTrans.isTranslated && (
+                          <div className="text-[10px] text-blue-600 font-sans font-normal">
+                            🌐 원문 ({notesTrans.detectedLanguage}): {insp.abnormalNotes}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-500">
+                        <span>점검자: {insp.workerName}</span>
+                        <span>측정 시각: {new Date(insp.inspectedAt).toLocaleTimeString()}</span>
+                      </div>
                     </div>
-                    <div className="bg-white p-2.5 rounded-lg text-xs font-mono text-rose-700 border border-rose-100 font-semibold">
-                      {insp.abnormalNotes}
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
-                      <span>점검자: {insp.workerName}</span>
-                      <span>측정 시각: {new Date(insp.inspectedAt).toLocaleTimeString()}</span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

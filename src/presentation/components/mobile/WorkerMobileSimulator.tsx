@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
 import { LocalStateStore, SafetyMaterial } from '@/infrastructure/storage/LocalStateStore';
-import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
+import { translationServiceInstance, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
 import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
   Smartphone,
@@ -60,7 +60,7 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
     updatePushHistory,
   } = useAppStore();
 
-  const translationService = new MultiLanguageTranslationService();
+  const translationService = translationServiceInstance;
 
   // Login / Auth State (Request #1: 최초 접속 시 미로그인 상태로 로그인 창 표시)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -126,12 +126,13 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
 
-  // PTW Request State
+  // PTW Request State (Initialized in worker's native language)
+  const initialDefaults = translationService.getWorkerFormDefaults(selectedLang);
   const [ptwForm, setPtwForm] = useState({
-    taskName: '스크러버 배관 플랜지 조임 및 고소 점검',
-    location: 'A동 화학탱크 상부 배관',
-    hazardFactors: '추락 위험, 가스 누출 가능성',
-    safetyMeasures: '안전대 2개소 체결, 가스측정기 휴대, 소화기 배치',
+    taskName: initialDefaults.ptw.taskName,
+    location: initialDefaults.ptw.location,
+    hazardFactors: initialDefaults.ptw.hazardFactors,
+    safetyMeasures: initialDefaults.ptw.safetyMeasures,
   });
 
   // Inspection Form State (Synced with Admin Inspection Targets)
@@ -146,38 +147,55 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
   const [equipmentUseForm, setEquipmentUseForm] = useState({
     equipmentType: equipmentTypes[0] || '지게차',
     equipmentNumber: '1호기',
-    purpose: 'A동 원자재 하역 및 파렛트 이송',
+    purpose: initialDefaults.equipmentUse.purpose,
     startTime: '2026-10-20 09:00',
     endTime: '2026-10-20 12:00',
-    location: 'A동 야적장',
+    location: initialDefaults.equipmentUse.location,
     hasLicense: true,
     preCheckCompleted: true,
   });
 
   // Before/After Form State (Request #4: 자동기입 및 문제점/개선이후 설명)
   const [reportForm, setReportForm] = useState({
-    taskName: '보일러실 배관 보온재 교체 및 청소',
+    taskName: initialDefaults.report.taskName,
     workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || ''})` : '작업자',
     workDate: '',
-    location: 'B동 보일러실 2구역',
+    location: initialDefaults.report.location,
     beforeImg1: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f6?auto=format&fit=crop&w=600&q=80',
     beforeImg2: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=600&q=80',
     afterImg1: 'https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=600&q=80',
     afterImg2: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-    beforeDescription: '노후 보온재 탈락으로 인한 열 손실 및 작업자 접촉 화상 위험 발생.',
-    afterDescription: '고효율 난연성 글라스울 재시공 및 외장 알루미늄 커버 체결 완료.',
-    description: '보온재 교체 작업 완료함.',
+    beforeDescription: initialDefaults.report.beforeDescription,
+    afterDescription: initialDefaults.report.afterDescription,
+    description: initialDefaults.report.description,
   });
 
-  // Update auto-filled worker name and date when worker changes or on mount
+  // Update auto-filled worker name, date, and native-language form defaults when worker or language changes
   useEffect(() => {
+    const defaults = translationService.getWorkerFormDefaults(selectedLang);
     const today = new Date().toISOString().split('T')[0];
+    setPtwForm({
+      taskName: defaults.ptw.taskName,
+      location: defaults.ptw.location,
+      hazardFactors: defaults.ptw.hazardFactors,
+      safetyMeasures: defaults.ptw.safetyMeasures,
+    });
+    setEquipmentUseForm((prev) => ({
+      ...prev,
+      purpose: defaults.equipmentUse.purpose,
+      location: defaults.equipmentUse.location,
+    }));
     setReportForm((prev) => ({
       ...prev,
+      taskName: defaults.report.taskName,
+      location: defaults.report.location,
+      beforeDescription: defaults.report.beforeDescription,
+      afterDescription: defaults.report.afterDescription,
+      description: defaults.report.description,
       workerName: currentWorker ? `${currentWorker.name} (${currentWorker.koreanName || currentWorker.nationality})` : prev.workerName,
       workDate: today,
     }));
-  }, [currentWorker?.id]);
+  }, [selectedLang, currentWorker?.id]);
 
   // Scanned QR result
   const [scannedEquipment, setScannedEquipment] = useState<any | null>(null);
@@ -885,10 +903,19 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                       작업 전 안전수칙 모바일 전자서명
                     </div>
 
-                    <div className="p-3 bg-[#1C1C1E] rounded-2xl space-y-1 text-[11px] text-gray-300">
-                      <div className="font-semibold text-white">작업명: 고소 및 배관 용접 작업</div>
-                      <p>1. 안전모 및 안전그네 착용을 확인했습니다.</p>
-                      <p>2. 소화기 2기 배치를 확인했습니다.</p>
+                    <div className="p-3 bg-[#1C1C1E] rounded-2xl space-y-1.5 text-[11px] text-gray-300">
+                      <div className="font-semibold text-white">
+                        {langInfo.flag} {translationService.translateInstruction('고소 및 배관 용접 작업 안전수칙', selectedLang)}
+                      </div>
+                      <p className="text-emerald-300 font-medium">
+                        1. {translationService.translateInstruction('안전모 턱끈 체결 및 안전대 2개소 걸이', selectedLang)}
+                      </p>
+                      <p className="text-emerald-300 font-medium">
+                        2. {translationService.translateInstruction('용접 작업 전 소화기 배치 및 불티 비산방지포 설치', selectedLang)}
+                      </p>
+                      <div className="text-[10px] text-gray-400 pt-1 border-t border-white/10">
+                        🇰🇷 한국어 원문: 고소 및 배관 용접 작업 (안전모·안전대 착용 및 소화기 배치 필수)
+                      </div>
                     </div>
 
                     <div>
@@ -950,6 +977,8 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                           const mySig = mat.signatures.find((s) => s.workerId === currentWorker.id);
                           const isSigned = !!mySig;
                           const isSelected = selectedMaterialId === mat.id;
+                          const transCat = translationService.translateInstruction(mat.category, selectedLang);
+                          const transTitle = translationService.translateInstruction(mat.title, selectedLang);
                           const trans = translationService.translateInstruction(mat.description, selectedLang);
 
                           return (
@@ -961,8 +990,11 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                             >
                               <div className="flex items-start justify-between gap-1.5">
                                 <div>
-                                  <span className="badge badge-blue text-[9px] mb-1 inline-block">{mat.category}</span>
-                                  <h4 className="font-bold text-white text-xs">{mat.title}</h4>
+                                  <span className="badge badge-blue text-[9px] mb-1 inline-block">{transCat}</span>
+                                  <h4 className="font-bold text-white text-xs">{transTitle}</h4>
+                                  {selectedLang !== 'ko' && transTitle !== mat.title && (
+                                    <div className="text-[9.5px] text-gray-400">🇰🇷 원문: {mat.title}</div>
+                                  )}
                                   <span className="text-[10px] text-gray-400">📄 {mat.fileName} ({mat.fileSize})</span>
                                 </div>
                                 {isSigned ? (
@@ -1181,8 +1213,14 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                       {ptwList.map((p) => {
                         const isApproved = p.status === 'APPROVED';
                         const isRejected = p.status === 'REJECTED';
+                        const transTask = /[가-힣]/.test(p.taskName)
+                          ? translationService.translateInstruction(p.taskName, selectedLang)
+                          : p.taskName;
+                        const transLoc = /[가-힣]/.test(p.location)
+                          ? translationService.translateInstruction(p.location, selectedLang)
+                          : p.location;
                         const translatedRejection = p.rejectionReason
-                          ? translationService.translateAdminTextToWorkerLang(p.rejectionReason, currentWorker.nationality)
+                          ? translationService.translateInstruction(p.rejectionReason, selectedLang)
                           : '';
 
                         return (
@@ -1198,8 +1236,8 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                           >
                             <div className="flex justify-between items-center">
                               <div>
-                                <div className="font-bold text-white">{p.taskName}</div>
-                                <div className="text-gray-400 text-[10px]">{p.location} ({p.ptwNumber})</div>
+                                <div className="font-bold text-white">{transTask}</div>
+                                <div className="text-gray-400 text-[10px]">{transLoc} ({p.ptwNumber})</div>
                               </div>
                               <span
                                 className={`badge ${
@@ -1260,11 +1298,14 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                           onChange={(e) => setEquipmentUseForm({ ...equipmentUseForm, equipmentType: e.target.value })}
                           className="w-full bg-black/50 border border-white/15 rounded-xl p-2 text-xs text-white"
                         >
-                          {equipmentTypes.map((type) => (
-                            <option key={type} value={type} className="bg-gray-900 text-white">
-                              {type}
-                            </option>
-                          ))}
+                          {equipmentTypes.map((type) => {
+                            const transType = translationService.translateInstruction(type, selectedLang);
+                            return (
+                              <option key={type} value={type} className="bg-gray-900 text-white">
+                                {selectedLang !== 'ko' && transType !== type ? `${transType} (${type})` : type}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
 
@@ -1340,8 +1381,14 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                       {equipmentUsageLogs.map((log) => {
                         const isApproved = log.status === 'APPROVED';
                         const isRejected = log.status === 'REJECTED';
+                        const transEqType = /[가-힣]/.test(log.equipmentType)
+                          ? translationService.translateInstruction(log.equipmentType, selectedLang)
+                          : log.equipmentType;
+                        const transPurpose = /[가-힣]/.test(log.purpose)
+                          ? translationService.translateInstruction(log.purpose, selectedLang)
+                          : log.purpose;
                         const translatedReject = log.rejectReason
-                          ? translationService.translateAdminTextToWorkerLang(log.rejectReason, currentWorker.nationality)
+                          ? translationService.translateInstruction(log.rejectReason, selectedLang)
                           : '';
 
                         return (
@@ -1358,8 +1405,8 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                             <div className="flex justify-between items-center">
                               <div>
                                 <div className="font-bold text-white flex items-center gap-1.5">
-                                  <span>[{log.equipmentType}]</span>
-                                  <span className="text-gray-300 font-normal">{log.purpose}</span>
+                                  <span>[{transEqType}]</span>
+                                  <span className="text-gray-300 font-normal">{transPurpose}</span>
                                 </div>
                                 <div className="text-[10px] text-gray-400">
                                   {log.startTime} ~ {log.endTime}
@@ -1440,7 +1487,7 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                     <form onSubmit={handleInspectionSubmit} className="space-y-3 bg-[#1C1C1E] p-3.5 rounded-2xl border border-white/10">
                       <div>
                         <label className="text-[11px] text-gray-300 block mb-1">
-                          내부 가열 온도 (°C) - 130°C 초과 시 관리자 웹에 즉시 경보
+                          {translationService.translateInstruction('가열 온도 (°C) - 기준치 130°C 초과 시 즉시 경보 발령', selectedLang)}
                         </label>
                         <input
                           type="number"
@@ -1454,7 +1501,7 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
 
                       <div>
                         <label className="text-[11px] text-gray-300 block mb-1">
-                          증기 공급 압력 (bar)
+                          {translationService.translateInstruction('공급 압력 (bar)', selectedLang)}
                         </label>
                         <input
                           type="number"
@@ -1682,7 +1729,9 @@ export const WorkerMobileSimulator: React.FC<WorkerMobileSimulatorProps> = ({ is
                     {scannedEquipment && (
                       <div className="p-3 bg-blue-950/40 border border-blue-500/40 rounded-2xl space-y-2 animate-fadeIn">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-sm text-white">{scannedEquipment.name}</span>
+                          <span className="font-bold text-sm text-white">
+                            {translationService.translateInstruction(scannedEquipment.name, selectedLang)}
+                          </span>
                           <span className="badge badge-amber">{scannedEquipment.type}</span>
                         </div>
 

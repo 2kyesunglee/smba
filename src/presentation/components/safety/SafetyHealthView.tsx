@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useAppStore } from '@/presentation/context/AppContext';
-import { MultiLanguageTranslationService, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
+import { translationServiceInstance, SUPPORTED_LANGUAGES } from '@/infrastructure/services/TranslationService';
 import { SafetyMaterial, PushHistoryItem, LocalStateStore } from '@/infrastructure/storage/LocalStateStore';
 import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
@@ -59,7 +59,7 @@ export const SafetyHealthView: React.FC = () => {
     addEquipmentType,
   } = useAppStore();
 
-  const translationService = new MultiLanguageTranslationService();
+  const translationService = translationServiceInstance;
 
   // Tab State: safety sections
   const [activeSection, setActiveSection] = useState<'education' | 'tbm' | 'equipment_logs' | 'instruction' | 'ptw' | 'sos'>('education');
@@ -1021,33 +1021,54 @@ export const SafetyHealthView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {sosList.map((sos) => (
-                <tr key={sos.id} className="hover:bg-[#F9FAFB]">
-                  <td className="font-mono text-xs">{sos.triggeredAt}</td>
-                  <td className="font-bold text-[#FF3B30]">{sos.workerName}</td>
-                  <td className="font-mono text-xs">{sos.phoneNumber}</td>
-                  <td className="font-semibold text-[#1D1D1F]">{sos.location}</td>
-                  <td className="text-xs text-[#515154]">{sos.message}</td>
-                  <td>
-                    <span className={`badge ${sos.status === 'TRIGGERED' ? 'badge-red' : 'badge-green'}`}>
-                      {sos.status}
-                    </span>
-                  </td>
-                  <td className="text-right">
-                    {sos.status === 'TRIGGERED' && (
-                      <button
-                        onClick={() => {
-                          resolveSOS(sos.id);
-                          alert('SOS 긴급 상황이 해제되었습니다.');
-                        }}
-                        className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
-                      >
-                        상황 해제
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {sosList.map((sos) => {
+                const matchedWorker = workers.find((w) => w.id === sos.workerId || w.name === sos.workerName);
+                const workerNat = matchedWorker?.nationality || 'VN';
+                const transLoc = translationService.translateWorkerTextToKorean(sos.location, workerNat);
+                const transMsg = translationService.translateWorkerTextToKorean(sos.message, workerNat);
+
+                return (
+                  <tr key={sos.id} className="hover:bg-[#F9FAFB]">
+                    <td className="font-mono text-xs">{sos.triggeredAt}</td>
+                    <td className="font-bold text-[#FF3B30]">{sos.workerName}</td>
+                    <td className="font-mono text-xs">{sos.phoneNumber}</td>
+                    <td className="font-semibold text-[#1D1D1F]">
+                      <div>{transLoc.koreanText}</div>
+                      {transLoc.isTranslated && (
+                        <div className="text-[10.5px] text-blue-600 font-normal mt-0.5">
+                          🌐 원문 ({transLoc.detectedLanguage}): {sos.location}
+                        </div>
+                      )}
+                    </td>
+                    <td className="text-xs text-[#515154]">
+                      <div className="font-medium text-[#1D1D1F]">{transMsg.koreanText}</div>
+                      {transMsg.isTranslated && (
+                        <div className="text-[10.5px] text-blue-600 mt-0.5">
+                          🌐 원문: {sos.message}
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`badge ${sos.status === 'TRIGGERED' ? 'badge-red' : 'badge-green'}`}>
+                        {sos.status}
+                      </span>
+                    </td>
+                    <td className="text-right">
+                      {sos.status === 'TRIGGERED' && (
+                        <button
+                          onClick={() => {
+                            resolveSOS(sos.id);
+                            alert('SOS 긴급 상황이 해제되었습니다.');
+                          }}
+                          className="btn-primary text-xs py-1 px-3 bg-[#34C759] hover:bg-[#2FB34F]"
+                        >
+                          상황 해제
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

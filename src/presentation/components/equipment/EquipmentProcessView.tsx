@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { useAppStore } from '@/presentation/context/AppContext';
-import { MultiLanguageTranslationService } from '@/infrastructure/services/TranslationService';
+import { translationServiceInstance } from '@/infrastructure/services/TranslationService';
 import { InspectionTarget } from '@/infrastructure/storage/LocalStateStore';
 import { compressImageFile } from '@/infrastructure/utils/imageCompressor';
 import {
@@ -57,7 +57,7 @@ export const EquipmentProcessView: React.FC = () => {
     rejectEquipmentUsage,
   } = useAppStore();
 
-  const translationService = new MultiLanguageTranslationService();
+  const translationService = translationServiceInstance;
 
   // Active section tab
   const [activeSection, setActiveSection] = useState<'gallery' | 'logs' | 'targets' | 'usageApproval' | 'qr' | 'builder'>('gallery');
@@ -1051,63 +1051,76 @@ export const EquipmentProcessView: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {equipmentUsageLogs
                   .filter((l) => l.status === 'REQUESTED')
-                  .map((log) => (
-                    <div key={log.id} className="p-4 bg-white rounded-2xl border-2 border-amber-300 shadow-sm space-y-3 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="badge badge-amber font-bold text-[10px] animate-pulse">승인 대기</span>
-                          <span className="text-[11px] text-[#86868B]">
-                            {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </span>
+                  .map((log) => {
+                    const matchedWorker = workers.find((w) => w.id === log.workerId || w.name === log.workerName);
+                    const workerNat = matchedWorker?.nationality || 'VN';
+                    const purposeTrans = translationService.translateWorkerTextToKorean(log.purpose, workerNat);
+
+                    return (
+                      <div key={log.id} className="p-4 bg-white rounded-2xl border-2 border-amber-300 shadow-sm space-y-3 flex flex-col justify-between">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="badge badge-amber font-bold text-[10px] animate-pulse">승인 대기</span>
+                            <span className="text-[11px] text-[#86868B]">
+                              {log.createdAt ? new Date(log.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <User className="w-4 h-4 text-[#0071E3]" />
+                            <span className="font-bold text-sm text-[#1D1D1F]">{log.workerName}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">
+                              {workerNat} 근로자
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 bg-[#F5F5F7] rounded-xl text-xs space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-[#86868B]">신청 기기:</span>
+                              <strong className="text-[#1D1D1F]">{log.equipmentType}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-[#86868B]">사용 시간:</span>
+                              <span className="text-[#1D1D1F]">{log.startTime} ~ {log.endTime}</span>
+                            </div>
+                            <div>
+                              <span className="text-[#86868B] block mb-0.5">사용 목적 (한국어 번역):</span>
+                              <span className="text-[#1D1D1F] font-semibold block">{purposeTrans.koreanText}</span>
+                              {purposeTrans.isTranslated && (
+                                <span className="text-[10.5px] text-blue-600 block mt-0.5">
+                                  🌐 모국어 원문 ({purposeTrans.detectedLanguage}): {log.purpose}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-[#0071E3]" />
-                          <span className="font-bold text-sm text-[#1D1D1F]">{log.workerName}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-medium">근로자</span>
-                        </div>
-
-                        <div className="p-2.5 bg-[#F5F5F7] rounded-xl text-xs space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-[#86868B]">신청 기기:</span>
-                            <strong className="text-[#1D1D1F]">{log.equipmentType}</strong>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-[#86868B]">사용 시간:</span>
-                            <span className="text-[#1D1D1F]">{log.startTime} ~ {log.endTime}</span>
-                          </div>
-                          <div>
-                            <span className="text-[#86868B] block mb-0.5">사용 목적:</span>
-                            <span className="text-[#1D1D1F] font-medium">{log.purpose}</span>
-                          </div>
+                        <div className="flex items-center gap-2 pt-2 border-t border-black/5">
+                          <button
+                            onClick={() => {
+                              const reason = prompt('반려 사유를 입력하세요:', '안전점검 미비 또는 작업구역 중복');
+                              if (reason) {
+                                rejectEquipmentUsage(log.id, reason, '안전관리자');
+                                alert('기기 사용 신청이 반려되었습니다.');
+                              }
+                            }}
+                            className="btn-secondary text-xs flex-1 justify-center py-2 text-[#FF3B30] border-red-200 hover:bg-red-50"
+                          >
+                            반려
+                          </button>
+                          <button
+                            onClick={() => {
+                              approveEquipmentUsage(log.id, '안전관리자');
+                              alert(`[${log.workerName}] 님의 [${log.equipmentType}] 기기 사용이 승인되었습니다.`);
+                            }}
+                            className="btn-primary text-xs flex-1 justify-center py-2 bg-emerald-600 hover:bg-emerald-700 shadow-sm"
+                          >
+                            승인 완료
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 pt-2 border-t border-black/5">
-                        <button
-                          onClick={() => {
-                            const reason = prompt('반려 사유를 입력하세요:', '안전점검 미비 또는 작업구역 중복');
-                            if (reason) {
-                              rejectEquipmentUsage(log.id, reason, '안전관리자');
-                              alert('기기 사용 신청이 반려되었습니다.');
-                            }
-                          }}
-                          className="btn-secondary text-xs flex-1 justify-center py-2 text-[#FF3B30] border-red-200 hover:bg-red-50"
-                        >
-                          반려
-                        </button>
-                        <button
-                          onClick={() => {
-                            approveEquipmentUsage(log.id, '안전관리자');
-                            alert(`[${log.workerName}] 님의 [${log.equipmentType}] 기기 사용이 승인되었습니다.`);
-                          }}
-                          className="btn-primary text-xs flex-1 justify-center py-2 bg-emerald-600 hover:bg-emerald-700 shadow-sm"
-                        >
-                          승인 완료
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             )}
           </div>
@@ -1133,14 +1146,26 @@ export const EquipmentProcessView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {equipmentUsageLogs.map((log) => (
-                    <tr key={log.id}>
-                      <td className="text-[11px] text-[#86868B] whitespace-nowrap">
-                        {log.createdAt ? new Date(log.createdAt).toLocaleString('ko-KR') : '-'}
-                      </td>
-                      <td className="font-semibold text-xs text-[#1D1D1F]">{log.workerName}</td>
-                      <td className="text-xs font-bold text-[#0071E3]">{log.equipmentType}</td>
-                      <td className="text-xs text-[#515154] max-w-xs truncate">{log.purpose}</td>
+                  {equipmentUsageLogs.map((log) => {
+                    const matchedWorker = workers.find((w) => w.id === log.workerId || w.name === log.workerName);
+                    const workerNat = matchedWorker?.nationality || 'VN';
+                    const purposeTrans = translationService.translateWorkerTextToKorean(log.purpose, workerNat);
+
+                    return (
+                      <tr key={log.id}>
+                        <td className="text-[11px] text-[#86868B] whitespace-nowrap">
+                          {log.createdAt ? new Date(log.createdAt).toLocaleString('ko-KR') : '-'}
+                        </td>
+                        <td className="font-semibold text-xs text-[#1D1D1F]">{log.workerName}</td>
+                        <td className="text-xs font-bold text-[#0071E3]">{log.equipmentType}</td>
+                        <td className="text-xs text-[#515154] max-w-xs">
+                          <div className="font-semibold text-[#1D1D1F] truncate">{purposeTrans.koreanText}</div>
+                          {purposeTrans.isTranslated && (
+                            <div className="text-[10px] text-blue-600 truncate">
+                              🌐 원문 ({purposeTrans.detectedLanguage}): {log.purpose}
+                            </div>
+                          )}
+                        </td>
                       <td className="text-xs font-mono">{log.startTime} ~ {log.endTime}</td>
                       <td>
                         {log.status === 'APPROVED' && (
@@ -1182,7 +1207,8 @@ export const EquipmentProcessView: React.FC = () => {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                   {equipmentUsageLogs.length === 0 && (
                     <tr>
                       <td colSpan={7} className="text-center py-6 text-xs text-[#86868B]">
